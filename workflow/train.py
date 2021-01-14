@@ -6,20 +6,15 @@ from utils.patching_utils import overlap_patching
 from utils.visualize_model import visualize_model
 import matplotlib.pyplot as plt
 from utils.preprocessing_util import preproc_input
+import sys
+from dataloader.SuperMUDI import DefineTrainValSuperMudiDataloader
 
 ## evaluate_using_training_testing_split
 def training(gen_conf, train_conf) :
     dataset_info = gen_conf['dataset_info'][train_conf['dataset']]
-    num_modalities = dataset_info['modalities']
     num_volumes = dataset_info['num_volumes']
-    dimension = train_conf['dimension']
-    patch_shape = train_conf['patch_shape']
-    output_shape = train_conf['output_shape']
 
-    mean_array = []
-    std_array = []
     mse_array = []
-    corr_array = []
 
     ## interpolation
     if dataset_info['is_preproc'] == True:
@@ -27,132 +22,74 @@ def training(gen_conf, train_conf) :
         interp_order = dataset_info['interp_order']
         preproc_input(gen_conf, train_conf, is_training=True, interp_order=interp_order) # input pre-processing
 
+    print("Set up data loader ...")
+    train_generator, val_generator = DefineTrainValSuperMudiDataloader(gen_conf, train_conf)
+
+    x, y = train_generator[0]
+    print(x.shape, y.shape)
+
     for case in range(train_conf['cases']):
         print("Start Case " + str(case) + " training...")
-        print("Load data ...")
-        # train_conf['this_case'] = case # this is used for saving sampled images
-        input_data, labels = read_dataset(gen_conf, train_conf)
-        print("Train model ...")
-        model, mean, std, mse, corr = train_model(
-            gen_conf, train_conf, input_data[:num_volumes[0]], labels[:num_volumes[0]], case)
-        mean_array.append(mean)
-        std_array.append(std)
+        model, mse = train_model_generator(gen_conf, train_conf, train_generator, val_generator, case)
         mse_array.append(mse)
-        corr_array.append(corr)
 
     # write to file
-    save_msecorr_array(gen_conf, train_conf, mse_array, corr_array)
+    save_msecorr_array(gen_conf, train_conf, mse_array, None)
+    # train_generator.clear_extracted_files() # remove the extracted patch folder
+    # update[25/08], the extracted files will be cleared outside the iqt code
 
-    return mean_array, std_array, mse_array, corr_array
+    return mse_array
 
-def train_model(gen_conf,
-                train_conf,
-                input_data,
-                labels,
-                case_name = 1):
+def train_model_generator(gen_conf, train_conf, train_generator, val_generator, case_name = 0):
     approach = train_conf['approach']
     dimension = train_conf['dimension']
     dataset_info = gen_conf['dataset_info'][train_conf['dataset']]
     num_classes = gen_conf['num_classes']
-    num_modalities = dataset_info['modalities']
+    num_modalities = dataset_info['modalities'] # designed number of modalities, a particular setup in training
     output_shape = train_conf['output_shape'] ## output patch size (32, 32, 32)
     patch_shape = train_conf['patch_shape']  ## input patch size (32, 32, 8)
 
-    if input_data.ndim == 6: # augmentation case
-        num_samples = dataset_info['num_samples'][1]
-
-    train_index, val_index = split_train_val(
-        range(len(input_data)), train_conf['validation_split'])
-
-    # mean, std = compute_statistics(input_data, num_modalities)
-    # input_data = normalise_set(input_data, num_modalities, mean, std)
-
     if train_conf['num_epochs'] != 0:
-        ## process input_data and labels here for dim = 6
-        ## todo: could move this module to patch_utils with using a wrap function
-        if input_data.ndim == 6: # the case of augmenting simulation
-            x_train = np.zeros((0, num_modalities) + patch_shape)
-            y_train = np.zeros((0, num_modalities) + output_shape)
-            for smpl_idx in range(num_samples):
-                this_input_data = np.reshape(input_data[:,:,0], input_data.shape[:2]+input_data.shape[3:])
-                np.delete(input_data, 0, 2)
-                this_x_train, this_y_train = overlap_patching(
-                    gen_conf, train_conf, this_input_data[train_index], labels[train_index])
-                x_train = np.vstack((x_train, this_x_train))
-                y_train = np.vstack((y_train, this_y_train))
-        else:
-            x_train, y_train = overlap_patching(
-                gen_conf, train_conf, input_data[train_index], labels[train_index])
-        ##
-
-        # debug_plot_patch(x_train, y_train)
-        ## data standardization w.r.t. patch
-        x_mean, x_std = compute_statistics(x_train, num_modalities)
-        y_mean, y_std = compute_statistics(y_train, num_modalities)
-        x_train = normalise_set(x_train, num_modalities, x_mean, x_std)
-        y_train = normalise_set(y_train, num_modalities, y_mean, y_std)
-
-        ## process input_data and labels here for dim = 6
-        ## todo: could move this module to patch_utils with using a wrap function
-        if input_data.ndim == 6:  # the case of augmenting simulation
-            x_val = np.zeros((0, num_modalities) + patch_shape)
-            y_val = np.zeros((0, num_modalities) + output_shape)
-            for smpl_idx in range(num_samples):
-                this_input_data = np.reshape(input_data[:,:,smpl_idx], input_data.shape[:2]+input_data.shape[3:])
-                this_x_val, this_y_val = overlap_patching(
-                gen_conf, train_conf, this_input_data[val_index], labels[val_index])
-                x_val = np.vstack((x_val, this_x_val))
-                y_val = np.vstack((y_val, this_y_val))
-        else:
-            x_val, y_val = overlap_patching(
-                gen_conf, train_conf, input_data[val_index], labels[val_index])
-            ##
-
-        ## data standardization w.r.t. patch
-        x_val = normalise_set(x_val, num_modalities, x_mean, x_std)
-        y_val = normalise_set(y_val, num_modalities, y_mean, y_std)
-
-        ## dictionary form of mean and std
-        mean = {'input': x_mean, 'output': y_mean}
-        std = {'input': x_std, 'output': y_std}
-        ## save mean and std
-        save_meanstd(gen_conf, train_conf, mean, std, case_name)
-
         # training callbacks
         callbacks = generate_callbacks(gen_conf, train_conf, case_name)
         if callbacks is not None: # train or not ?
-            model = __train_model(
-                gen_conf, train_conf, x_train, y_train, x_val, y_val, case_name, callbacks)
+            model = __train_model(gen_conf, train_conf, train_generator, val_generator, case_name, callbacks)
         else:
             model = read_model(gen_conf, train_conf, case_name)
-            mean, std = read_meanstd(gen_conf, train_conf, case_name)
 
-        ## compute mse and corr on validation set
-        y_out = model.predict(x_val,
-                              batch_size=train_conf['batch_size'],
-                              verbose=train_conf['verbose'])
-        mse = np.sum((y_out-y_val)**2)/y_val.shape[0]*y_std**2
-        corr = 1-np.sum((y_out-y_val)**2)/np.sum((y_val)**2)
+        if val_generator is not None:
+            ## compute mse and corr on validation set
+            mse = model.evaluate(val_generator,
+                                 batch_size=train_conf['batch_size'],
+                                 workers=train_conf['workers'],
+                                 use_multiprocessing=train_conf['use_multiprocessing'],
+                                 verbose=train_conf['verbose'])
+        else:
+            mse = model.evaluate(train_generator,
+                                 batch_size=train_conf['batch_size'],
+                                 workers=train_conf['workers'],
+                                 use_multiprocessing=train_conf['use_multiprocessing'],
+                                 verbose=train_conf['verbose'])
     else:
         model = []
-        mean = {'input': 0, 'output': 0}
-        std = {'input': 1, 'output': 1}
         mse = None
-        corr = None
 
-    return model, mean, std, mse, corr
+    return model, mse
 
-def __train_model(gen_conf, train_conf, x_train, y_train, x_val, y_val, case_name, callbacks, vis_flag=False):
+def __train_model(gen_conf, train_conf, train_generator, val_generator, case_name, callbacks, vis_flag=False):
     model = generate_model(gen_conf, train_conf)
 
     print(model.summary()) # print model summary
 
     history = model.fit(
-        x_train, y_train,
+        train_generator,
         batch_size=train_conf['batch_size'],
         epochs=train_conf['num_epochs'],
-        validation_data=(x_val, y_val),
+        validation_data=val_generator,
+        shuffle=train_conf['shuffle'],
         verbose=train_conf['verbose'],
+        workers=train_conf['workers'],
+        use_multiprocessing=train_conf['use_multiprocessing'],
         callbacks=callbacks)
     print(history.params) # print model parameters
 

@@ -45,47 +45,6 @@ def image_evaluation(gen_conf, test_conf, case_name = 1):
     if sparse_scale == [1, 1, 1]:
         compare_images_and_get_stats(gen_conf, test_conf, im_gt, im_interp, case_name, save_filename='interp')
 
-    # compare difference map
-    ## todo: extend difference map
-
-    # # load the ground truth image and mask:
-    # im_gt = sr_utility.read_t1t2_volume(
-    #     nameroot=os.path.join(gt_dir, subject, subpath, opt['gt_header']),
-    #     no_channels=no_channels,
-    #     category=test_category)  ## todo: t1t2 case
-    # output_file_np = output_file + '.npy'
-    # if os.path.exists(output_file_np):
-    #     im_hr = np.load(output_file_np)
-    # # mask_file = "mask_us={:d}_rec={:d}.nii".format(opt["upsampling_rate"], 5)
-    # # mask_dir_local = os.path.join(opt["mask_dir"], subject, opt["mask_subpath"],
-    # #                               "masks")  ## todo: remove mask
-    # mask_file = ''
-    # mask_dir_local = ''
-    #
-    #
-    #     print("Mask for the interior region NOT FOUND")
-    #     mask = np.zeros(im_hr.shape[:-1], dtype=int) == 0
-    #     m, m2, p, s = compare_images_and_get_stats(im_gt,
-    #                                                im_hr, mask,
-    #                                                "whole")  ## todo: modify channels!!!
-    #     csv_file = os.path.join(save_stats_dir, 'stats_brain.csv')
-    #     headers = ['subject', 'RMSE(whole)', 'Median(whole)', 'PSNR(whole)', 'MSSIM(whole)']
-    #     stats = [m, m2, p, s]
-    #
-    # # Save the stats to a CSV file:
-    # save_stats(csv_file, opt['subject'], headers, stats)
-    #
-    # # Compute difference maps and save:
-    # if opt["not_save"]:
-    #     print("Selected not to save the outputs")
-    # else:
-    #     compute_differencemaps_t1t2(im_gt, im_hr,  ## todo: modify channels
-    #                                 mask, output_file, no_channels,
-    #                                 save_as_ijk=opt['save_as_ijk'],
-    #                                 gt_dir=os.path.join(gt_dir, subject, subpath),
-    #                                 gt_header=opt['gt_header'],
-    #                                 category=test_category)  ## todo: compute_differencemaps_t1t2
-
 def compare_images_and_get_stats(gen_conf, test_conf, im_gt, im_recon, case_name = 1, save_filename='ind'):
     num_volumes = im_gt.shape[0]
     modalities = im_gt.shape[1]

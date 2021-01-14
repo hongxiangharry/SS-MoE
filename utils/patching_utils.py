@@ -41,17 +41,17 @@ def overlap_patching(gen_conf,
         output_nominal_shape = tuple(np.array(patch_shape)*sparse_scale)
         output_selector = determine_output_selector(dimension, output_nominal_shape, output_shape)
         output_patch_shape = (modalities,) + output_shape ## (1, 32, 32, 32)
-        output_patch = np.zeros((0,) + output_patch_shape) ## output patch size
+        output_patch = np.zeros((0,) + output_patch_shape, dtype=np.float32) ## output patch size
+
+        minimum_non_bg = bg_discard_percentage * np.prod(output_shape)  ## number of non-background voxels in input patch
     else:
         output_patch = None
         extraction_step = train_test_conf['extraction_step_test']  ## shifting step (32, 32, 8)
 
-    minimum_non_bg = bg_discard_percentage * np.prod(patch_shape)
-
     input_patch_shape = (modalities,) + patch_shape ## (1, 32, 32, 8)
     data_extraction_step = (modalities,) + extraction_step ## (1, 16, 16, 4)
 
-    input_patch = np.zeros((0, ) + input_patch_shape)
+    input_patch = np.zeros((0, ) + input_patch_shape, dtype=np.float32)
     len_input_data = len(input_data) # the first size of dimensions
     for idx in range(len_input_data):
         ## padding the original input image to make sure all patches can be extracted.
@@ -79,7 +79,7 @@ def overlap_patching(gen_conf,
             valid_idxs = np.where(np.sum(output_tmp_train[:, representative_modality] != 0, axis=sum_axis) >= minimum_non_bg)
             N = max( valid_idxs[0].shape )
 
-            output_patch = np.vstack((output_patch, np.zeros((N,) + output_patch_shape)))
+            output_patch = np.vstack((output_patch, np.zeros((N,) + output_patch_shape, dtype=np.float32)))
 
             output_patch[input_length:] = output_tmp_train[valid_idxs] # input length = output length
             del output_tmp_train
@@ -90,7 +90,7 @@ def overlap_patching(gen_conf,
             input_tmp_train = extract_patches(dimension, input_vol, input_patch_shape, data_extraction_step)
             del input_vol
 
-            input_patch = np.vstack((input_patch, np.zeros((N,) + input_patch_shape)))
+            input_patch = np.vstack((input_patch, np.zeros((N,) + input_patch_shape, dtype=np.float32)))
 
             input_patch[input_length:] = input_tmp_train[valid_idxs]
             del input_tmp_train

@@ -25,8 +25,7 @@ def interp_input(gen_conf, test_conf, interp_order=3) :
         in_postfix = dataset_info['in_postfix'] # raw input data name
         out_postfix = dataset_info['interp_postfix'] # processed output data name
         return upsample_Nigeria19Multimodal_dataset(dataset_path, dataset_info, in_postfix, out_postfix, is_training = False, interp_order=interp_order)
-
-    if dataset == 'MBB':
+    elif dataset == 'MBB':
         in_postfix = dataset_info['in_postfix'] # raw input data name
         out_postfix = dataset_info['interp_postfix'] # processed output data name
         return upsample_MBB_dataset(dataset_path, dataset_info, in_postfix, out_postfix, is_training = False, interp_order=interp_order)

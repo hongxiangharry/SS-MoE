@@ -23,11 +23,13 @@ def argument_parse():
     parser.add_argument('-dp', '--dataset_path', dest='dataset_path', nargs='?', type=str, help='dataset directory')
     parser.add_argument('-bp', '--base_path', dest='base_path', nargs='?', type=str, help='workplace directory')
     parser.add_argument('-jn', '--job_name', dest='job_name', nargs='?', type=str, help='job name of folder')
+    parser.add_argument('-j', '--job_id', dest='job_id', nargs='?', default=None, type=str, help='job id to qsub system')
 
     ## dataset info
     parser.add_argument('--dataset', dest='dataset', nargs='?', type=str, help='dataset name')
     parser.add_argument('--no_subject', dest='no_subject', nargs='*', type=int, help='set train/test subjects')
     parser.add_argument('--num_samples', dest='num_samples', nargs='*', type=int, help='set augmenting total/train/test samples')
+
     # patching info
     parser.add_argument('-es', '--extraction_step', dest='extraction_step', nargs='*', type=int,
                         help='stride between patch for training')
@@ -39,8 +41,12 @@ def argument_parse():
                         help='output patch shape')
     parser.add_argument('-opt', '--output_patch_test', dest='output_patch_test', nargs='*', type=int,
                         help='output patch shape for testing')
-    parser.add_argument('-psr', '--patch_sampling_rate', dest='patch_sampling_rate', nargs='?', type=float,
-                        help='rate of patch sampling per image')
+    parser.add_argument('-mnp', '--max_num_patches', dest='max_num_patches', nargs='?', type=int,
+                        help='maximal number of patches per volume')
+    parser.add_argument('-ntp', '--num_training_patches', dest='num_training_patches', nargs='?', type=int,
+                        help='number of training patches')
+    parser.add_argument('-od', '--outlier_detection', dest='outlier_detection', nargs='?', type=str, help='Use an outlier detection method')
+    parser.add_argument('--rebuild', action='store_true', help='rebuild training patch set')
 
     # network info
     parser.add_argument('--approach', dest='approach', nargs='?', type=str, help='name of network architecture')
@@ -59,10 +65,18 @@ def argument_parse():
                         help='number of FSRCNN shrinking layers')
     parser.add_argument('-nl', '--num_levels', dest='num_levels', nargs='?', type=int,
                         help='number of U-Net levels')
-    parser.add_argument('-c', '--cases', dest='cases', nargs='?', type=int, help='number of training cases')
+    parser.add_argument('-cas', '--ca_scale', dest='ca_scale', nargs='?', type=float,
+                        help='shrinkage scale of channel attention module')
+    parser.add_argument('-carr', '--ca_reduced_rate', dest='ca_reduced_rate', nargs='?', type=int,
+                        help='reduced rate of filters in channel attention module')
 
-    # # action : Turn on the value for the key, i.e. "overwrite=True"
-    # parser.add_argument('--overwrite', action='store_true', help='restart the training completelu')
+    parser.add_argument('-c', '--cases', dest='cases', nargs='?', type=int, help='number of training cases')
+    parser.add_argument('-vs', '--validation_split', dest='validation_split', nargs='?', type=float, help='validation split rate')
+
+
+    # action : Turn on the value for the key, i.e. "overwrite=True"
+    parser.add_argument('--retrain', action='store_true', help='restart the training completely')
+
     # parser.add_argument('--continue', action='store_true', help='continue training from previous epoch')
     # parser.add_argument('--is_reset', action='store_true', help='reset the patch library?')
     # parser.add_argument('--not_save', action='store_true', help='invoke if you do not want to save the output')
@@ -76,7 +90,7 @@ def argument_parse():
     # parser.add_argument('--mask_dir', type=str, default='/SAN/vision/hcp/Ryu/miccai2017/hcp_masks',
     #                     help='directory of segmentation masks')
     # parser.add_argument('--mask_subpath', type=str, default='', help='subdirectory in mask_dir')
-    #
+    #u
     # # Network
     # parser.add_argument('-m', '--method', dest='method', type=str, default='espcn', help='network type')
     # parser.add_argument('--no_filters', type=int, default=50, help='number of initial filters')
@@ -122,6 +136,7 @@ def set_conf_info(gen_conf, train_conf):
     if opt['dataset_path'] is not None: gen_conf['dataset_path'] = opt['dataset_path']
     if opt['base_path'] is not None: gen_conf['base_path'] = opt['base_path']
     if opt['job_name'] is not None: gen_conf['job_name'] = opt['job_name']
+    if opt['job_id'] is not None: gen_conf['job_id'] = opt['job_id']
 
     if opt['dataset'] is not None: train_conf['dataset'] = opt['dataset']
     if opt['no_subject'] is not None: gen_conf['dataset_info'][train_conf['dataset']]['num_volumes'] = opt['no_subject']
@@ -132,7 +147,10 @@ def set_conf_info(gen_conf, train_conf):
     if opt['input_patch'] is not None: train_conf['patch_shape'] = tuple(opt['input_patch'])
     if opt['output_patch'] is not None: train_conf['output_shape'] = tuple(opt['output_patch'])
     if opt['output_patch_test'] is not None: train_conf['output_shape_test'] = tuple(opt['output_patch_test'])
-    if opt['patch_sampling_rate'] is not None: train_conf['patch_sampling_rate'] = opt['patch_sampling_rate']
+    if opt['max_num_patches'] is not None: train_conf['max_num_patches'] = opt['max_num_patches']
+    if opt['num_training_patches'] is not None: train_conf['num_training_patches'] = opt['num_training_patches']
+    train_conf['outlier_detection'] = opt['outlier_detection'] if opt['outlier_detection'] is not None else None
+    train_conf['rebuild'] = opt['rebuild']
 
     if opt['approach'] is not None: train_conf['approach'] = opt['approach']
     if opt['loss'] is not None: train_conf['loss'] = opt['loss']
@@ -148,10 +166,16 @@ def set_conf_info(gen_conf, train_conf):
     if opt['num_filters'] is not None: train_conf['num_filters'] = opt['num_filters']
     if opt['mapping_times'] is not None: train_conf['mapping_times'] = opt['mapping_times']
     if opt['num_levels'] is not None: train_conf['num_levels'] = opt['num_levels']
+    if opt['ca_scale'] is not None: train_conf['ca_scale'] = opt['ca_scale']
+    if opt['ca_reduced_rate'] is not None: train_conf['ca_reduced_rate'] = opt['ca_reduced_rate']
+    if opt['validation_split'] is not None: train_conf['validation_split'] = opt['validation_split']
+
     if opt['cases'] is not None: train_conf['cases'] = opt['cases']
+
+    train_conf['retrain'] = opt['retrain']
     return opt, gen_conf, train_conf
 
-def conf_dataset(gen_conf, train_conf):
+def conf_dataset(gen_conf, train_conf, trainTestFlag = 'train'):
     # configure log/model/result/evaluation paths.
     gen_conf['log_path'] = os.path.join(gen_conf['base_path'], gen_conf['job_name'], gen_conf['log_path_'])
     gen_conf['model_path'] = os.path.join(gen_conf['base_path'], gen_conf['job_name'], gen_conf['model_path_'])
@@ -172,6 +196,57 @@ def conf_dataset(gen_conf, train_conf):
         return conf_Juntendo_Volunteer_dataset(gen_conf, train_conf)
     if dataset == 'MBB':
         return conf_MBB_dataset(gen_conf, train_conf)
+    if dataset == 'MUDI':
+        return conf_MUDI_dataset(gen_conf, train_conf, trainTestFlag)
+
+def conf_MUDI_dataset(gen_conf, traintest_conf, trainTestFlag = 'train'):
+    dataset_path = gen_conf['dataset_path']
+    dataset_name = traintest_conf['dataset']
+    job_id = gen_conf['job_id'] if 'job_id' in gen_conf.keys() else None
+
+    dataset_info = gen_conf['dataset_info'][dataset_name]
+    path = dataset_info['path'][0]
+    train_num_volumes = dataset_info['num_volumes'][0]
+    test_num_volumes = dataset_info['num_volumes'][1]
+
+    in_postfix = dataset_info['in_postfix']
+
+    whole_dataset_path = os.path.join(dataset_path, path)
+    if trainTestFlag == 'train' or trainTestFlag == 'eval':
+        subject_lib = sorted([os.path.basename(subject) for subject in glob.glob(whole_dataset_path+'/cdmri*')])
+    elif trainTestFlag == 'test':
+        subject_lib = sorted([os.path.basename(os.path.dirname(subject)) for subject in glob.glob(whole_dataset_path + '/testsbj*/' + in_postfix + '.zip')])
+            # sorted([os.path.basename(os.path.dirname(subject)) for subject in glob.glob('/cluster/project0/IQT_Nigeria/others/SuperMudi/process/testsbj*/aniso.zip')])
+
+    # subject_lib = sorted(os.listdir(hcp_dataset_path)) # alphabetical order
+    # # for cluster
+    # if '.DS_Store' in subject_lib:
+    #     subject_lib.remove('.DS_Store')
+    assert len(subject_lib) >=  train_num_volumes + test_num_volumes
+
+    if trainTestFlag == 'train' :
+        dataset_info['training_subjects'] = []
+        for idx, subject in enumerate(subject_lib):
+            if os.path.isdir(os.path.join(whole_dataset_path, subject)) \
+                    and idx < dataset_info['num_volumes'][0]:
+                dataset_info['training_subjects'].append(subject)
+
+    if trainTestFlag == 'test' or trainTestFlag == 'eval':
+        dataset_info['test_subjects'] = []
+        idx = dataset_info['num_volumes'][0]
+        for subject in subject_lib[dataset_info['num_volumes'][0]:]:
+            if os.path.isdir(os.path.join(whole_dataset_path, subject)) \
+                    and idx < dataset_info['num_volumes'][0] + dataset_info['num_volumes'][1]:
+                dataset_info['test_subjects'].append(subject)
+                idx += 1
+
+    # set patch lib temp path to local storage .. [25/08/20]
+    if job_id is not None:
+        dataset_info['path'][2] = dataset_info['path'][2].format(job_id)
+
+    gen_conf['dataset_info'][dataset_name] = dataset_info
+
+    return gen_conf, traintest_conf
 
 def conf_MBB_dataset(gen_conf, train_conf):
     dataset_path = gen_conf['dataset_path']

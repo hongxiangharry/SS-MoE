@@ -11,7 +11,8 @@ from tensorflow.keras.layers import add as layer_add
 from tensorflow.keras.layers import BatchNormalization
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam, SGD
-from utils.loss_util import L2TV, L2L2
+from utils.loss_utils import L2TV, L2L2
+# from skimage.measure import compare_psnr, compare_ssim as psnr, ssim
 
 # K.set_image_dim_ordering('th')
 K.set_image_data_format('channels_first')
@@ -154,6 +155,66 @@ def __generate_hetero_unet_model_multi(
 
     return Model(inputs=[input], outputs=[pred])
 
+# def __generate_hetero_unet_model_1dir(
+#     dimension, num_modalities, input_shape, output_shape, activation, shuffling_dim, sparse_scale, downsize_factor=2, num_kernels=3, num_filters=64, thickness_factor = 4, n_bb_mapping=2, num_levels = 4) :
+#     '''
+#     anisotropic down-sample
+#     16(16,16,16)-32(16,16,16)-64(8,8,8)-128(4,4,4)-256(2,2,2)-256(2,2,2)-128(4,4,4)-64(8,8,8)-32(16,16,16)-16(32,32,32)
+#     :param dimension:
+#     :param num_modalities:
+#     :param input_shape:
+#     :param output_shape:
+#     :param activation:
+#     :param shuffling_dim:
+#     :param sparse_scale:
+#     :param downsize_factor:
+#     :param num_kernels:
+#     :param num_filters:
+#     :return:
+#     '''
+#     sparse_scale = np.array(sparse_scale)   # np serialize
+#     input = Input(shape=input_shape)
+#
+#     downsample_step = [1, 1, 1]
+#     downsample_step[shuffling_dim-1] = 2
+#
+#     mp_kernel_size = [2, 2, 2]
+#     mp_kernel_size[shuffling_dim-1] = 1
+#
+#     if thickness_factor == 2:
+#         assert num_levels > 1, "'n_levels' should be larger than 1. "
+#         conv_stack = []
+#         temp_sparse_scale = sparse_scale  # [1, 1, 2]
+#         conv = get_conv_core(dimension, input, int(num_filters/downsize_factor), num_kernel=num_kernels) # 32x16
+#
+#         # converging path
+#         for idx in range(1, num_levels, 1):
+#             if idx >= 2:
+#                 mp_kernel_size = None
+#             ## partial contraction
+#             pool = get_max_pooling_layer(dimension, conv, mp_kernel_size) # 16 x 16
+#             # bb block
+#             conv = get_shuffling_operation(dimension, conv, n_bb_mapping, temp_sparse_scale) # 32 x 32
+#             conv_stack.append(conv)
+#             conv = get_conv_core(dimension, pool, int(num_filters*2**idx/downsize_factor), num_kernel=num_kernels) # 16 x 16
+#
+#             if idx < 2:
+#                 temp_sparse_scale = temp_sparse_scale // downsample_step # [1,1,1]
+#
+#         up = conv
+#         # extraction path
+#         for idx in range(num_levels-1, 0, -1):
+#             conv = get_conv_core(dimension, up, int(num_filters*2**idx/downsize_factor), num_kernel=num_kernels)
+#             up = get_deconv_layer(dimension, conv, int(num_filters*2**(idx-1)/downsize_factor))
+#             up = concatenate([up, conv_stack[idx-1]], axis=1)
+#
+#         conv = get_conv_core(dimension, up, int(num_filters/downsize_factor), num_kernel=num_kernels)
+#         pred = get_conv_fc(dimension, conv, num_modalities)
+#
+#     pred = organise_output(pred, output_shape, activation)
+#
+#     return Model(inputs=[input], outputs=[pred])
+
 def __generate_hetero_unet_model_1dir(
     dimension, num_modalities, input_shape, output_shape, activation, shuffling_dim, sparse_scale, downsize_factor=2, num_kernels=3, num_filters=64, thickness_factor = 4, n_bb_mapping=2, num_levels = 4) :
     '''
@@ -180,7 +241,6 @@ def __generate_hetero_unet_model_1dir(
     mp_kernel_size = [2, 2, 2]
     mp_kernel_size[shuffling_dim-1] = 1
 
-
     if thickness_factor == 2:
 
         assert num_levels > 1, "'n_levels' should be larger than 1. "
@@ -196,6 +256,7 @@ def __generate_hetero_unet_model_1dir(
             pool = get_max_pooling_layer(dimension, conv, mp_kernel_size) # 16 x 16
             # bb block
             conv = get_shuffling_operation(dimension, conv, n_bb_mapping, temp_sparse_scale) # 32 x 32
+            print(conv.output_shape)
             conv_stack.append(conv)
             conv = get_conv_core(dimension, pool, int(num_filters*2**idx/downsize_factor), num_kernel=num_kernels) # 16 x 16
 

@@ -4,6 +4,8 @@ import os
 from architectures.arch_creator import generate_model
 from utils.patching_utils import overlap_patching
 from numpy.random import shuffle
+import zipfile
+import shutil
 
 def read_meanstd(gen_conf, test_conf, case_name = 1) :
     mean_filename = generate_output_filename(
@@ -72,6 +74,22 @@ def save_meanstd(gen_conf, train_conf, mean, std, case_name = 1):
     np.savez(mean_filename, mean_input=mean['input'], mean_output=mean['output'])
     np.savez(std_filename, std_input=std['input'], std_output=std['output'])
     return True
+
+def read_meanstd_MUDI_output(gen_conf, test_conf):
+    dataset = test_conf['dataset']
+    dataset_path = gen_conf['dataset_path']
+    dataset_info = gen_conf['dataset_info'][dataset]
+
+    path = dataset_info['path'][0]
+    pattern = dataset_info['general_pattern']
+
+    mean_filename = os.path.join(dataset_path, path, 'org_mean.npy')
+
+    mean = np.load(mean_filename)
+
+    std_filename = os.path.join(dataset_path, path, 'org_std.npy')
+    std = np.load(std_filename)
+    return mean, std
 
 def save_random_samples(gen_conf, train_conf, ran_samples, case_name = 1):
     filename = generate_output_filename(
@@ -142,9 +160,9 @@ def read_dataset(gen_conf, train_conf, trainTestFlag = 'train') :
     dataset = train_conf['dataset']
     dataset_path = gen_conf['dataset_path']
     dataset_info = gen_conf['dataset_info'][dataset]
-    if dataset == 'IBADAN-k8':
+    if dataset == 'IBADAN-k8' :
         return read_IBADAN_data(dataset_path, dataset_info, trainTestFlag)
-    if dataset == 'HBN':
+    if dataset == 'HBN' :
         return read_HBN_dataset(dataset_path, dataset_info, trainTestFlag)
     if dataset == 'HCP-Wu-Minn-Contrast' :
         return read_HCPWuMinnContrast_dataset(dataset_path, dataset_info, trainTestFlag)
@@ -160,10 +178,72 @@ def read_dataset(gen_conf, train_conf, trainTestFlag = 'train') :
         return read_HCPWuMinnContrastMultimodal_dataset(dataset_path, dataset_info, trainTestFlag)
     if dataset == 'Nigeria19-Multimodal' :
         return read_Nigeria19Multimodal_dataset(dataset_path, dataset_info, trainTestFlag)
-    if dataset == 'Juntendo-Volunteer':
+    if dataset == 'Juntendo-Volunteer' :
         return read_JH_Volunteer_dataset(dataset_path, dataset_info, trainTestFlag)
-    if dataset == 'MBB':
+    if dataset == 'MBB' :
         return read_MBB_dataset(dataset_path, dataset_info, trainTestFlag)
+    if dataset == 'MUDI' :
+        return read_MUDI_dataset(dataset_path, dataset_info, trainTestFlag)
+
+def read_MUDI_dataset(dataset_path,
+                      dataset_info,
+                      trainTestFlag='train'):
+    dimensions = dataset_info['dimensions']
+    sparse_scale = dataset_info['sparse_scale']
+    input_dimension = tuple(np.array(dimensions) // sparse_scale)
+    real_modalities = dataset_info['real_modalities']
+    modalities = dataset_info['modalities']
+    path = dataset_info['path'][0] # process, 0
+    unzip_path = dataset_info['path'][2] # patch, 2
+    pattern = dataset_info['general_pattern']
+    modality_categories = dataset_info['modality_categories']
+    in_postfix = dataset_info['in_postfix']
+    out_postfix = dataset_info['out_postfix']
+    if trainTestFlag == 'train':
+        subject_lib = dataset_info['training_subjects']
+        num_volumes = dataset_info['num_volumes'][0]
+    elif trainTestFlag == 'test' or trainTestFlag == 'eval':
+        subject_lib = dataset_info['test_subjects']
+        num_volumes = dataset_info['num_volumes'][1]
+    else:
+        raise ValueError("trainTestFlag should be declared as 'train'/'test'/'evaluation'")
+
+    in_data = np.zeros((num_volumes * real_modalities, 1) + input_dimension, dtype=np.float32)
+    if trainTestFlag == 'train' or trainTestFlag == 'eval':
+        out_data = np.zeros((num_volumes * real_modalities, 1) + dimensions, dtype=np.float32)
+    else:
+        out_data = None
+
+    for img_idx in range(num_volumes):
+        in_zip_name = os.path.join(dataset_path,
+                                   path,
+                                   pattern).format(subject_lib[img_idx],
+                                                   in_postfix, '', 'zip')
+        in_unzip_dir = os.path.splitext(os.path.join(dataset_path, unzip_path, pattern)
+                                        .format(subject_lib[img_idx], in_postfix+'_unzip', '', 'zip'))[0]
+        unzip(in_zip_name, in_unzip_dir)
+
+        if trainTestFlag == 'train' or trainTestFlag == 'eval':
+            out_zip_name = os.path.join(dataset_path,
+                                        path,
+                                        pattern).format(subject_lib[img_idx],
+                                                        out_postfix, '', 'zip')
+            out_unzip_dir = os.path.splitext(os.path.join(dataset_path, unzip_path, pattern)
+                                        .format(subject_lib[img_idx], out_postfix+'_unzip', '', 'zip'))[0]
+            unzip(out_zip_name, out_unzip_dir)
+
+        for mod_idx in range(real_modalities):
+            in_filename = os.path.join(dataset_path, unzip_path, subject_lib[img_idx], pattern).format(in_postfix+'_unzip', in_postfix, str(mod_idx).zfill(4), 'nii.gz')
+            in_data[img_idx * real_modalities + mod_idx, 0] = read_volume(in_filename).astype(np.float32)
+            if trainTestFlag == 'train' or trainTestFlag == 'eval':
+                out_filename = os.path.join(dataset_path, unzip_path, subject_lib[img_idx], pattern).format(out_postfix+'_unzip', out_postfix, str(mod_idx).zfill(4), 'nii.gz')
+                out_data[img_idx * real_modalities + mod_idx, 0] = read_volume(out_filename).astype(np.float32)
+
+        shutil.rmtree(in_unzip_dir)
+        if trainTestFlag == 'train' or trainTestFlag == 'eval':
+            shutil.rmtree(out_unzip_dir)
+
+    return in_data, out_data
 
 def read_MBB_dataset(dataset_path,
                      dataset_info,
@@ -738,7 +818,7 @@ def read_result_volume_HCPWuMinnContrast(gen_conf, test_conf, case_name = 1) :
 
     return out_data
 
-def save_volume(gen_conf, test_conf, volume, case_idx) :
+def save_volume(gen_conf, test_conf, volume, case_idx, flag = 'test') :
     dataset = test_conf['dataset']
     if dataset == 'IBADAN-k8' :
         return save_volume_IBADAN(gen_conf, test_conf, volume, case_idx)
@@ -758,8 +838,60 @@ def save_volume(gen_conf, test_conf, volume, case_idx) :
         return save_volume_MICCAI2012(gen_conf, test_conf, volume, case_idx)
     elif dataset == 'MBB':
         return save_volume_MBB(gen_conf, test_conf, volume, case_idx)
+    elif dataset == 'MUDI':
+        return save_volume_MUDI(gen_conf, test_conf, volume, case_idx, flag=flag)
     else:
         return save_volume_else(gen_conf, test_conf, volume, case_idx)
+
+def save_volume_MUDI(gen_conf, test_conf, volume, case_idx, flag='test') :
+    '''
+    save as 4D NIFTY
+    :param gen_conf:
+    :param test_conf:
+    :param volume: 4D (x,y,z,t)
+    :param case_idx: 0:subject, 1: case
+    :return:
+    '''
+    # todo: check conf and modalities
+    dataset = test_conf['dataset']
+    dataset_info = gen_conf['dataset_info'][dataset]
+    dataset_path = gen_conf['dataset_path']
+    path = dataset_info['path'][1] # origin
+    pattern = dataset_info['general_pattern']
+    modality_categories = dataset_info['modality_categories']
+    in_postfix = dataset_info['in_postfix']
+    if flag == 'test' or flag == 'eval':
+        subject_lib = dataset_info['test_subjects']
+    elif flag == 'train':
+        subject_lib = dataset_info['training_subjects']
+    sparse_scale = dataset_info['sparse_scale']
+
+    data_filename = os.path.join(dataset_path, path, pattern)\
+        .format(subject_lib[case_idx[0]], in_postfix, '', 'nii.gz')
+    image_data = read_volume_data(data_filename)
+
+    ## change affine in the nii header
+    if sparse_scale is not None:
+        assert len(sparse_scale) == 3, "The length of sparse_scale is not equal to 3."
+        # print image_data.affine
+        nifty_affine = np.dot(image_data.affine, np.diag(tuple(1.0/np.array(sparse_scale))+(1.0, )))
+        # print nifty_affine
+
+    ## save as 4D nifty
+    out_filename = generate_output_filename(
+        gen_conf['results_path'],
+        test_conf['dataset'],
+        subject_lib[case_idx[0]]+'_c'+str(case_idx[1]),
+        test_conf['approach'],
+        test_conf['dimension'],
+        str(test_conf['patch_shape']),
+        str(test_conf['extraction_step']),
+        dataset_info['format'])
+    out_foldername = os.path.dirname(out_filename)
+    if not os.path.isdir(out_foldername) :
+        os.makedirs(out_foldername)
+    print("Save file at {}".format(out_filename))
+    __save_volume(volume, nifty_affine, out_filename, dataset_info['format'])
 
 def save_volume_MBB(gen_conf, test_conf, volume, case_idx) :
     # todo: check conf and modalities
@@ -1206,3 +1338,7 @@ def generate_patch_filename( modality, sample_num, patch_shape, extraction_step,
     file_pattern = '{}-{}-{}-{}.{}'
     print(file_pattern.format( modality, sample_num, patch_shape, extraction_step, extension))
     return file_pattern.format( modality, sample_num, patch_shape, extraction_step, extension)
+
+def unzip(src_filename, dest_dir):
+    with zipfile.ZipFile(src_filename) as z:
+        z.extractall(path=dest_dir)

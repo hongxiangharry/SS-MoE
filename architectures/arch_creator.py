@@ -6,6 +6,8 @@ from .IsoUnet import generate_iso_unet_model
 from .AnisoUnetOld import generate_aniso_unet_old_model
 from .SRUnet import generate_srunet_model
 from .AnisoUnetCustomLoss import generate_aniso_unet_model
+from .IsoSRUnetCustomLoss import generate_iso_srunet_model
+from .IsoCAUnet import generate_iso_caunet_model
 
 def generate_model(gen_conf, train_conf) :
     approach = train_conf['approach']
@@ -26,4 +28,8 @@ def generate_model(gen_conf, train_conf) :
         return generate_srunet_model(gen_conf, train_conf)
     if approach == 'AnisoUnet' :
         return generate_aniso_unet_model(gen_conf, train_conf)
+    if approach == 'IsoSRUnet' :
+        return generate_iso_srunet_model(gen_conf, train_conf)
+    if approach == 'IsoCAUnet' :
+        return generate_iso_caunet_model(gen_conf, train_conf)
     return None
