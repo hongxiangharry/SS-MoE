@@ -10,7 +10,7 @@ general_configuration = {
     'dataset_info' : {
         'MUDI': {
             'format' : 'nii.gz',
-            'dimensions': (84, 92, 56), # output shape
+            'dimensions': (82, 92, 56), # output shape
             'num_volumes': [0, 1], # train and test
             'real_modalities': 1344, # num volumes per 4D data
             'modalities': 1,

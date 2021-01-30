@@ -14,20 +14,20 @@ from config_iso import test_configuration as test_conf
 from workflow.data_preparation import data_preparation
 from workflow.build_training_set import build_training_set
 from workflow.train import training
-from workflow.test import testing
-from workflow.evaluate import evaluating
+from workflow.test_S2 import test_S2_test
+from workflow.evaluate_S1_label import evaluating_S2_test_label
 import numpy as np
 
-# data preparation
-opt, gen_conf, train_conf = data_preparation(gen_conf, train_conf)
+'''
+# generate test error level label
 
-# # build training set
-# count_patches = build_training_set(gen_conf, train_conf)
-
-# training process
-mse_array = training(gen_conf, train_conf)
-
-# test process
-case_name = np.argmin(mse_array)
 opt, gen_conf, test_conf = data_preparation(gen_conf, test_conf, 'eval')
-evaluating(gen_conf, test_conf, flag='eval', case_name=case_name)
+evaluating_S2_test_label(gen_conf, test_conf, flag='eval', case_name=0)
+'''
+
+
+# test in stage2
+opt, gen_conf_train, train_conf = data_preparation(gen_conf, train_conf)
+opt, gen_conf_test, test_conf = data_preparation(gen_conf, test_conf, 'eval')
+test_S2_test(gen_conf_train, gen_conf_test, train_conf, test_conf, flag='eval', case_name=0)
+

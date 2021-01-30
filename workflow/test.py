@@ -1,5 +1,4 @@
 import numpy as np
-
 from architectures.arch_creator import generate_model
 from utils.callbacks import generate_callbacks
 from utils.ioutils import read_dataset, save_volume, read_model, generate_output_filename, read_meanstd, read_meanstd_MUDI_output

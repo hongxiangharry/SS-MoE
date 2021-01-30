@@ -139,6 +139,26 @@ def save_msecorr_array(gen_conf, train_conf, mse_array, corr_array) :
     np.savez(filename, mse_array=mse_array, corr_array=corr_array)
     return True
 
+
+def save_msecorr_array_S2(gen_conf, train_conf, mse_array, corr_array) :
+    filename = generate_output_filename(
+        gen_conf['model_path'],
+        train_conf['dataset'],
+        'mse_corr_S2',
+        train_conf['approach'],
+        train_conf['dimension'],
+        str(train_conf['patch_shape']),
+        str(train_conf['extraction_step']),
+        'npz')
+    ## check and make folders
+    foldername = os.path.dirname(filename)
+    if not os.path.isdir(foldername):
+        os.makedirs(foldername)
+    np.savez(filename, mse_array=mse_array, corr_array=corr_array)
+    return True
+
+
+
 def read_model(gen_conf, train_conf, case_name) :
     model = generate_model(gen_conf, train_conf)
 
@@ -152,6 +172,7 @@ def read_model(gen_conf, train_conf, case_name) :
         str(train_conf['extraction_step']),
         'h5')
 
+    print('!!!!!!!!!!!', model_filename)
     model.load_weights(model_filename)
 
     return model
@@ -183,7 +204,90 @@ def read_dataset(gen_conf, train_conf, trainTestFlag = 'train') :
     if dataset == 'MBB' :
         return read_MBB_dataset(dataset_path, dataset_info, trainTestFlag)
     if dataset == 'MUDI' :
-        return read_MUDI_dataset(dataset_path, dataset_info, trainTestFlag)
+        #return read_MUDI_dataset(dataset_path, dataset_info, trainTestFlag)
+        return read_MUDI_dataset_2(dataset_path, dataset_info, trainTestFlag)
+
+
+def read_MUDI_dataset_2(dataset_path,
+                      dataset_info,
+                      trainTestFlag='train'):
+    dimensions = dataset_info['dimensions']
+    sparse_scale = dataset_info['sparse_scale']
+    input_dimension = tuple(np.array(dimensions) // sparse_scale)
+    real_modalities = dataset_info['real_modalities']
+    modalities = dataset_info['modalities']
+    path = dataset_info['path'][0] # process, 0
+    unzip_path = dataset_info['path'][2] # patch, 2
+    pattern = dataset_info['general_pattern']
+    modality_categories = dataset_info['modality_categories']
+    in_postfix = dataset_info['in_postfix']
+    out_postfix = dataset_info['out_postfix']
+
+    filename_list = []
+
+    if trainTestFlag == 'train':
+        subject_lib = dataset_info['test_subjects']
+        num_volumes = dataset_info['num_volumes'][1]
+    elif trainTestFlag == 'test' or trainTestFlag == 'eval':
+        subject_lib = dataset_info['test_subjects']
+        num_volumes = dataset_info['num_volumes'][1]
+    else:
+        raise ValueError("trainTestFlag should be declared as 'train'/'test'/'evaluation'")
+
+    in_data = np.zeros((num_volumes * real_modalities, 1) + input_dimension, dtype=np.float32)
+    if trainTestFlag == 'train' or trainTestFlag == 'eval':
+        out_data = np.zeros((num_volumes * real_modalities, 1) + dimensions, dtype=np.float32)
+    else:
+        out_data = None
+
+
+    # print out to see which represent the patch name
+    for img_idx in range(num_volumes):
+        in_zip_name = os.path.join(dataset_path,
+                                   path,
+                                   pattern).format(subject_lib[img_idx],
+                                                   in_postfix, '', 'zip')
+        in_unzip_dir = os.path.splitext(os.path.join(dataset_path, unzip_path, pattern)
+                                        .format(subject_lib[img_idx], in_postfix+'_unzip', '', 'zip'))[0]
+        unzip(in_zip_name, in_unzip_dir)
+
+
+
+        if trainTestFlag == 'train' or trainTestFlag == 'eval':
+            out_zip_name = os.path.join(dataset_path,
+                                        path,
+                                        pattern).format(subject_lib[img_idx],
+                                                        out_postfix, '', 'zip')
+            out_unzip_dir = os.path.splitext(os.path.join(dataset_path, unzip_path, pattern)
+                                        .format(subject_lib[img_idx], out_postfix+'_unzip', '', 'zip'))[0]
+            unzip(out_zip_name, out_unzip_dir)
+
+        for mod_idx in range(real_modalities):
+            in_filename = os.path.join(dataset_path, unzip_path, subject_lib[img_idx], pattern).format(in_postfix+'_unzip', in_postfix, str(mod_idx).zfill(4), 'nii.gz')
+            # maybe this in_filename & split is good for the name list
+            
+            #print('the in_filename is: ', in_filename)
+            in_data[img_idx * real_modalities + mod_idx, 0] = read_volume(in_filename).astype(np.float32)
+
+            filename_list.append(in_filename)
+
+            if trainTestFlag == 'train' or trainTestFlag == 'eval':
+                out_filename = os.path.join(dataset_path, unzip_path, subject_lib[img_idx], pattern).format(out_postfix+'_unzip', out_postfix, str(mod_idx).zfill(4), 'nii.gz')
+
+                #print('the out_filename is: ', out_filename)
+
+                out_data[img_idx * real_modalities + mod_idx, 0] = read_volume(out_filename).astype(np.float32)
+
+        shutil.rmtree(in_unzip_dir)
+        if trainTestFlag == 'train' or trainTestFlag == 'eval':
+            shutil.rmtree(out_unzip_dir)
+
+    print('111111111111', np.shape(filename_list))
+    # return the name list out
+    return in_data, out_data, filename_list
+
+
+
 
 def read_MUDI_dataset(dataset_path,
                       dataset_info,
@@ -214,6 +318,8 @@ def read_MUDI_dataset(dataset_path,
     else:
         out_data = None
 
+
+    # print out to see which represent the patch name
     for img_idx in range(num_volumes):
         in_zip_name = os.path.join(dataset_path,
                                    path,
@@ -222,6 +328,8 @@ def read_MUDI_dataset(dataset_path,
         in_unzip_dir = os.path.splitext(os.path.join(dataset_path, unzip_path, pattern)
                                         .format(subject_lib[img_idx], in_postfix+'_unzip', '', 'zip'))[0]
         unzip(in_zip_name, in_unzip_dir)
+
+
 
         if trainTestFlag == 'train' or trainTestFlag == 'eval':
             out_zip_name = os.path.join(dataset_path,
@@ -234,15 +342,22 @@ def read_MUDI_dataset(dataset_path,
 
         for mod_idx in range(real_modalities):
             in_filename = os.path.join(dataset_path, unzip_path, subject_lib[img_idx], pattern).format(in_postfix+'_unzip', in_postfix, str(mod_idx).zfill(4), 'nii.gz')
+            # maybe this in_filename & split is good for the name list
+            
+            print('the in_filename is: ', in_filename)
             in_data[img_idx * real_modalities + mod_idx, 0] = read_volume(in_filename).astype(np.float32)
             if trainTestFlag == 'train' or trainTestFlag == 'eval':
                 out_filename = os.path.join(dataset_path, unzip_path, subject_lib[img_idx], pattern).format(out_postfix+'_unzip', out_postfix, str(mod_idx).zfill(4), 'nii.gz')
+
+                print('the out_filename is: ', out_filename)
+
                 out_data[img_idx * real_modalities + mod_idx, 0] = read_volume(out_filename).astype(np.float32)
 
         shutil.rmtree(in_unzip_dir)
         if trainTestFlag == 'train' or trainTestFlag == 'eval':
             shutil.rmtree(out_unzip_dir)
 
+    # return the name list out
     return in_data, out_data
 
 def read_MBB_dataset(dataset_path,
@@ -1315,7 +1430,7 @@ def read_volume_data(filename) :
 
 def generate_output_filename(
     path, dataset, case_name, approach, dimension, patch_shape, extraction_step, extension) :
-#     file_pattern = '{}/{}/{:02}-{}-{}-{}-{}.{}'
+#     file_pattern = '{}/{}/{}-{}-{}-{}-{}.{}'
     file_pattern = '{}/{}/{}-{}-{}-{}-{}.{}'
     print(file_pattern.format(path, dataset, case_name, approach, dimension, patch_shape, extraction_step, extension))
     return file_pattern.format(path, dataset, case_name, approach, dimension, patch_shape, extraction_step, extension)

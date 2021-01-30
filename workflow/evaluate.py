@@ -73,12 +73,14 @@ def eval_model(gen_conf,
             ## should only sample one subject
             if input_data.ndim == 6 :
                 input_data_temp = np.reshape(input_data[test_index], (1, )+input_data.shape[1:2]+input_data.shape[3:])
+                output_data_temp = np.reshape(output_data[test_index], (1, )+output_data.shape[1:2]+output_data.shape[3:])
             else:
                 input_data_temp = np.reshape(input_data[test_index], (1, )+input_data.shape[1:])
+                output_data_temp = np.reshape(output_data[test_index], (1, )+output_data.shape[1:])
 
-            x_test, _ = overlap_patching(gen_conf, test_conf, input_data_temp,
-                         output_data = None,
-                         trainTestFlag = 'test',
+            x_test, y_test = overlap_patching(gen_conf, test_conf, input_data_temp,
+                         output_data_temp,
+                         trainTestFlag = 'train',
                          representative_modality = 0)
 
             # x_test = normalise_volume(x_test, num_modalities, mean['input'], std['input'])

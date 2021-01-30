@@ -175,6 +175,7 @@ def set_conf_info(gen_conf, train_conf):
     train_conf['retrain'] = opt['retrain']
     return opt, gen_conf, train_conf
 
+
 def conf_dataset(gen_conf, train_conf, trainTestFlag = 'train'):
     # configure log/model/result/evaluation paths.
     gen_conf['log_path'] = os.path.join(gen_conf['base_path'], gen_conf['job_name'], gen_conf['log_path_'])
@@ -199,6 +200,7 @@ def conf_dataset(gen_conf, train_conf, trainTestFlag = 'train'):
     if dataset == 'MUDI':
         return conf_MUDI_dataset(gen_conf, train_conf, trainTestFlag)
 
+'''
 def conf_MUDI_dataset(gen_conf, traintest_conf, trainTestFlag = 'train'):
     dataset_path = gen_conf['dataset_path']
     dataset_name = traintest_conf['dataset']
@@ -206,6 +208,7 @@ def conf_MUDI_dataset(gen_conf, traintest_conf, trainTestFlag = 'train'):
 
     dataset_info = gen_conf['dataset_info'][dataset_name]
     path = dataset_info['path'][0]
+
     train_num_volumes = dataset_info['num_volumes'][0]
     test_num_volumes = dataset_info['num_volumes'][1]
 
@@ -222,6 +225,69 @@ def conf_MUDI_dataset(gen_conf, traintest_conf, trainTestFlag = 'train'):
     # # for cluster
     # if '.DS_Store' in subject_lib:
     #     subject_lib.remove('.DS_Store')
+    print(np.array(subject_lib).shape)
+    subject_lib_specfic = subject_lib[4]
+    print(len(subject_lib_specfic))
+    print(train_num_volumes)
+    print(test_num_volumes)
+    assert len(subject_lib) >=  train_num_volumes + test_num_volumes
+
+    if trainTestFlag == 'train' :
+        dataset_info['training_subjects'] = []
+        for idx, subject in enumerate(subject_lib_specfic):
+            if os.path.isdir(os.path.join(whole_dataset_path, subject)) \
+                    and idx < dataset_info['num_volumes'][0]:
+                dataset_info['training_subjects'].append(subject)
+
+    if trainTestFlag == 'test' or trainTestFlag == 'eval':
+        dataset_info['test_subjects'] = []
+        idx = dataset_info['num_volumes'][0]
+        for subject in subject_lib_specfic[dataset_info['num_volumes'][0]:]:
+            if os.path.isdir(os.path.join(whole_dataset_path, subject)) \
+                    and idx < dataset_info['num_volumes'][0] + dataset_info['num_volumes'][1]:
+                dataset_info['test_subjects'].append(subject)
+                idx += 1
+
+    # set patch lib temp path to local storage .. [25/08/20]
+    if job_id is not None:
+        dataset_info['path'][2] = dataset_info['path'][2].format(job_id)
+
+    gen_conf['dataset_info'][dataset_name] = dataset_info
+
+    return gen_conf, traintest_conf
+'''
+
+
+
+def conf_MUDI_dataset(gen_conf, traintest_conf, trainTestFlag = 'train'):
+    dataset_path = gen_conf['dataset_path']
+    dataset_name = traintest_conf['dataset']
+    job_id = gen_conf['job_id'] if 'job_id' in gen_conf.keys() else None
+
+    dataset_info = gen_conf['dataset_info'][dataset_name]
+    path = dataset_info['path'][0]
+
+    train_num_volumes = dataset_info['num_volumes'][0]
+    test_num_volumes = dataset_info['num_volumes'][1]
+
+    in_postfix = dataset_info['in_postfix']
+
+    whole_dataset_path = os.path.join(dataset_path, path)
+    if trainTestFlag == 'train' or trainTestFlag == 'eval':
+        subject_lib = sorted([os.path.basename(subject) for subject in glob.glob(whole_dataset_path+'/cdmri*')])
+    elif trainTestFlag == 'test':
+        subject_lib = sorted([os.path.basename(os.path.dirname(subject)) for subject in glob.glob(whole_dataset_path + '/testsbj*/' + in_postfix + '.zip')])
+            # sorted([os.path.basename(os.path.dirname(subject)) for subject in glob.glob('/cluster/project0/IQT_Nigeria/others/SuperMudi/process/testsbj*/aniso.zip')])
+
+    # subject_lib = sorted(os.listdir(hcp_dataset_path)) # alphabetical order
+    # # for cluster
+    # if '.DS_Store' in subject_lib:
+    #     subject_lib.remove('.DS_Store')
+    print(np.array(subject_lib).shape)
+    #subject_lib = subject_lib[4]
+    print(len(subject_lib))
+    print(train_num_volumes)
+    print(test_num_volumes)
     assert len(subject_lib) >=  train_num_volumes + test_num_volumes
 
     if trainTestFlag == 'train' :
@@ -247,6 +313,8 @@ def conf_MUDI_dataset(gen_conf, traintest_conf, trainTestFlag = 'train'):
     gen_conf['dataset_info'][dataset_name] = dataset_info
 
     return gen_conf, traintest_conf
+
+
 
 def conf_MBB_dataset(gen_conf, train_conf):
     dataset_path = gen_conf['dataset_path']

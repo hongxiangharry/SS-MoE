@@ -16,10 +16,11 @@ mkdir -p $SSD_PATH
 echo "Unzipping data ..."
 unzip -q "$ZIP_FILE" -d "$SSD_PATH"
 
-cd /cluster/project0/IQT_Nigeria/others/SuperMudi/code/IQT_supermudi/main
+cd /cluster/project0/IQT_Nigeria/others/SuperMudi/code/iqt_supermudi-main/main
 source activate iqt
+source /share/apps/source_files/cuda/cuda-10.1.source
 
-python main_iso_eval.py -jn iso_lr1e-3_p888_sbj4_nf64 --no_subject 4 1 --approach IsoSRUnet -nf 64 -nk 2 -mt 2 -nl 3 -c 1 -ne 100 -bs 64 -lr 1e-3 -j $JOB_ID -ntp 100000 -mnp 100 -ip 8 8 8 -op 16 16 16 -opt 8 8 8 -es 4 4 4 -est 4 4 4
+python main_iso_test.py --retrain -jn iso_lr1e-3_p888_sbj4_nf64 --no_subject 4 1 --approach IsoSRUnet -nf 64 -nk 2 -mt 2 -nl 3 -c 1 -ne 100 -bs 64 -lr 1e-3 -j $JOB_ID -ntp 215936 -mnp 100 -ip 8 8 8 -op 16 16 16 -opt 8 8 8 -es 4 4 4 -est 4 4 4
 
 function finish {
     rm -rf /scratch0/harrylin/$JOB_ID
