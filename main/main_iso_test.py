@@ -24,7 +24,7 @@ from workflow.test_S2 import test_S2_test
 from workflow.test_S3 import test_S3_test
 
 
-
+'''
 # pretraining
 # data preparation
 opt, gen_conf, train_conf = data_preparation(gen_conf, train_conf)
@@ -34,7 +34,7 @@ opt, gen_conf, train_conf = data_preparation(gen_conf, train_conf)
 mse_array = training(gen_conf, train_conf)
 
 # test process
-'''
+
 case_name = np.argmin(mse_array)
 
 case_name = 0
@@ -43,20 +43,23 @@ testing(gen_conf, test_conf, case_name)
 '''
 
 
-'''
+
 
 # Generate the error label
 # data preparation
+'''
 opt, gen_conf, train_conf = data_preparation(gen_conf, train_conf)
 
 case_name = 0
 #opt, gen1_conf, test_conf = data_preparation(gen1_conf, test_conf, 'test')
-#generate_train_label(gen_conf, train_conf)
+generate_train_label(gen_conf, train_conf)
 
-opt, gen1_conf, test_conf = data_preparation(gen1_conf, test_conf, 'test')
-generate_test_label(gen1_conf, train_conf)
+# generate test error level label
 
+opt, gen_conf, test_conf = data_preparation(gen_conf, test_conf, 'eval')
+evaluating_S2_test_label(gen_conf, test_conf, flag='eval', case_name=0)
 '''
+
 
 
 
@@ -90,19 +93,19 @@ generate_class(gen_conf, train_conf)
 
 
 
-'''
+
 # Stage-3 training
 opt, gen_conf, train_conf = data_preparation(gen_conf, train_conf)
 
 # training process
 mse_array = training_S3(gen_conf, train_conf)
 
+
+
+
+
 '''
-
-
-
-'''
-# test the prediction in Stage3
+# test the in Stage3
 
 opt, gen_conf_train, train_conf = data_preparation(gen_conf, train_conf, 'train')
 opt, gen_conf_test, test_conf = data_preparation(gen_conf, test_conf, 'eval')

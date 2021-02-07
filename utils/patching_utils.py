@@ -128,7 +128,6 @@ def overlap_patching_test(gen_conf,
     return input_patch, output_patch
 
 
-
 def overlap_patching(gen_conf,
                      train_test_conf,
                      input_data,
@@ -145,8 +144,6 @@ def overlap_patching(gen_conf,
     patch_shape = train_test_conf['patch_shape'] ## input patch size (32, 32, 8)
     sparse_scale = dataset_info['sparse_scale'] ## [1, 1, 4]
     if output_data is not None and trainTestFlag == 'train':
-
-        # extraction_step is the same in training and test (4, 4, 4)
         extraction_step = train_test_conf['extraction_step']  ## shifting step (16, 16, 4)
         output_extraction_step = (modalities,) + tuple(np.array(extraction_step)*sparse_scale) ## (1, 16, 16, 16)
         output_shape = train_test_conf['output_shape'] ## (32, 32, 32)
@@ -223,8 +220,6 @@ def overlap_patching(gen_conf,
         #     ## todo: push error information
 
     ## shuffle patches and pick a subset
-    '''
-    # 20210126
     if output_data is not None and trainTestFlag == 'train':
         psr = train_test_conf['patch_sampling_rate']
         num_sampling_patch = int(np.ceil(input_patch.shape[0]*psr))
@@ -234,7 +229,6 @@ def overlap_patching(gen_conf,
 
         input_patch = input_patch[smpl_patch_indices]
         output_patch = output_patch[smpl_patch_indices]
-    '''
 
     return input_patch, output_patch
 

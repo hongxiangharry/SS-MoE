@@ -55,9 +55,9 @@ def generate_iso_srunet_model_S3(gen_conf, train_conf) :
 
     # optimizer
     if optimizer == 'Adam' :
-        optimizer = Adam(lr=lr, decay=decay)
+        optimizer = Adam(lr=0.0001, decay=decay)
     elif optimizer == 'SGD' :
-        optimizer =  SGD(lr=lr, nesterov=True)
+        optimizer =  SGD(lr=0.0001, nesterov=True)
 
     # loss
     if loss == 'l2tv':

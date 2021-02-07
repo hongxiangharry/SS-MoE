@@ -45,8 +45,6 @@ def reconstruct_volume_imaging4(gen_conf, train_conf, patches) :
         output_shape = (1, ) + output_shape[1:]
 
     for count, coord in enumerate(coordinates) :
-        print(len(list(coordinates)))
-        print(count)
         selection = [slice(coord[i] - output_shape[i], coord[i]) for i in range(len(coord))] # non-padding
         ## rec_volume[selection] += patches[count] # non-padding
         rec_volume[selection] += patches[output_selector][count]   ## non-padding

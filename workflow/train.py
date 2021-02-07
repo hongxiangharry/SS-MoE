@@ -242,7 +242,7 @@ def __train_model_S2(gen_conf, train_conf, train_generator, val_generator, case_
 
     # optimizer
     if optimizer == 'Adam' :
-        optimizer = Adam(lr=0.01, beta_1=0.9, beta_2=0.999)
+        optimizer = Adam(lr=0.001, beta_1=0.9, beta_2=0.999)
     elif optimizer == 'SGD' :
         optimizer =  SGD(lr=lr, nesterov=True)
 
@@ -356,6 +356,7 @@ def train_model_generator_S3(gen_conf, train_conf, train_generator_1, train_gene
                                  workers=train_conf['workers'],
                                  use_multiprocessing=train_conf['use_multiprocessing'],
                                  verbose=train_conf['verbose'])
+	    
             mse_4 = model_4.evaluate(val_generator_4,
                                  batch_size=train_conf['batch_size'],
                                  workers=train_conf['workers'],
@@ -387,7 +388,7 @@ def __train_model_S3(gen_conf, train_conf, train_generator_1, train_generator_2,
 
     print(model_1.summary()) # print model summary
 
-    
+        
     history = model_1.fit(
         train_generator_1,
         batch_size=train_conf['batch_size'],
@@ -429,7 +430,7 @@ def __train_model_S3(gen_conf, train_conf, train_generator_1, train_generator_2,
         callbacks=callbacks_3)
     print(history.params) # print model parameters
 
-
+    
     history = model_4.fit(
         train_generator_4,
         batch_size=train_conf['batch_size'],

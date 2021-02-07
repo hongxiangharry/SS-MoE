@@ -154,21 +154,27 @@ def eval_model(gen_conf,
     mse_list = []
     mse_array = []
 
+    '''
     data_list = pd.read_csv('/cluster/project0/IQT_Nigeria/others/SuperMudi/code/iqt_supermudi-main/Stage2_test_label.csv')
     label_in = data_list[['index', 'Level']]
     index_in = np.array(label_in['index'])
     label_level_list_in = np.array(label_in['Level'])
-
+    '''
     model_1 = generate_model_s3(gen_conf_train, train_conf_1)
     model_2 = generate_model_s3(gen_conf_train, train_conf_1)
     model_3 = generate_model_s3(gen_conf_train, train_conf_1)
     model_4 = generate_model_s3(gen_conf_train, train_conf_1)
-
+    
     model_1.load_weights('/cluster/project0/IQT_Nigeria/others/SuperMudi/results/iso_lr1e-3_p888_sbj4_nf64/models/MUDI/S3_para_batchnormalization_1-IsoSRUnet-3-(8, 8, 8)-(4, 4, 4).h5')
     model_2.load_weights('/cluster/project0/IQT_Nigeria/others/SuperMudi/results/iso_lr1e-3_p888_sbj4_nf64/models/MUDI/S3_para_batchnormalization_2-IsoSRUnet-3-(8, 8, 8)-(4, 4, 4).h5')
     model_3.load_weights('/cluster/project0/IQT_Nigeria/others/SuperMudi/results/iso_lr1e-3_p888_sbj4_nf64/models/MUDI/S3_para_batchnormalization_3-IsoSRUnet-3-(8, 8, 8)-(4, 4, 4).h5')
     model_4.load_weights('/cluster/project0/IQT_Nigeria/others/SuperMudi/results/iso_lr1e-3_p888_sbj4_nf64/models/MUDI/S3_para_batchnormalization_4-IsoSRUnet-3-(8, 8, 8)-(4, 4, 4).h5')
-
+    '''
+    model_1.load_weights('/cluster/project0/IQT_Nigeria/others/SuperMudi/results/iso_lr1e-3_p888_sbj4_nf64/models/MUDI/0-IsoSRUnet-3-(8, 8, 8)-(4, 4, 4).h5')
+    model_2.load_weights('/cluster/project0/IQT_Nigeria/others/SuperMudi/results/iso_lr1e-3_p888_sbj4_nf64/models/MUDI/0-IsoSRUnet-3-(8, 8, 8)-(4, 4, 4).h5')
+    model_3.load_weights('/cluster/project0/IQT_Nigeria/others/SuperMudi/results/iso_lr1e-3_p888_sbj4_nf64/models/MUDI/0-IsoSRUnet-3-(8, 8, 8)-(4, 4, 4).h5')
+    model_4.load_weights('/cluster/project0/IQT_Nigeria/others/SuperMudi/results/iso_lr1e-3_p888_sbj4_nf64/models/MUDI/0-IsoSRUnet-3-(8, 8, 8)-(4, 4, 4).h5')
+    '''
     para_file=open('/cluster/project0/IQT_Nigeria/others/SuperMudi/code/iqt_supermudi-main/parameters.txt')
     txt=para_file.readlines()
     para_list=[]
@@ -198,19 +204,19 @@ def eval_model(gen_conf,
                 output_data_temp = np.reshape(output_data[test_index], (1, )+output_data.shape[1:])
 
             filename_modality = filename_list[test_index]
-            x_test, y_test = overlap_patching_test(gen_conf, test_conf, input_data_temp,
-                         output_data_temp,
-                         trainTestFlag = 'train',
+            x_test, _ = overlap_patching(gen_conf, test_conf, input_data_temp,
+                         output_data = None,
+                         trainTestFlag = 'test',
                          representative_modality = 0)
 
             # x_test = normalise_volume(x_test, num_modalities, mean['input'], std['input'])
 
-            x_test_ensemble = np.zeros((y_test.shape))
+            x_test_ensemble = np.zeros((x_test.shape[0:-3]+(16,16,16)))
 
             patch_index = np.arange(len(x_test))
             patch_index_absolute = patch_index + mod_idx*len(x_test)
 
-            label_level_modality = label_level_list_in[patch_index_absolute]
+            #label_level_modality = label_level_list_in[patch_index_absolute]
 
             for k in patch_index:
                 filename_modality_index = filename_modality + '-' + str(k)
@@ -218,8 +224,11 @@ def eval_model(gen_conf,
 
             if para=='para':
                 para_modality = para_numpy[mod_idx]
-                para_modality_expand = np.tile(para_modality,(183,1))
+                para_modality_expand = np.tile(para_modality,(1056,1))
                 x_test_en = [x_test, para_modality_expand]
+
+            print('x_test shape is: ', np.shape(x_test))
+            print('para_modality_expand shape is: ', np.shape(para_modality_expand))
 
             recon_im = model.predict(x_test_en, verbose=test_conf['verbose'])
 
@@ -232,7 +241,7 @@ def eval_model(gen_conf,
             index_4=[i for i,x in enumerate(recon_im_decode) if x==3]
 
             
-            assert (len(index_1)+len(index_2)+len(index_3)+len(index_4))==183
+            assert (len(index_1)+len(index_2)+len(index_3)+len(index_4))==1056
 
             if len(index_1)!= 0:
                 data_for_decoder_1 = x_test[index_1]
@@ -251,6 +260,7 @@ def eval_model(gen_conf,
                 recon_im_4 = model_4.predict(data_for_decoder_4, verbose=test_conf['verbose'])
                 x_test_ensemble[index_4] = recon_im_4
 
+            #np.save('/cluster/project0/IQT_Nigeria/others/SuperMudi/code/iqt_supermudi-main/test_{}.npy'.format(test_index), x_test_ensemble)
 
             #x_test_ensemble[index_1] = recon_im_1
             #x_test_ensemble[index_2] = recon_im_2
@@ -259,27 +269,32 @@ def eval_model(gen_conf,
 
             # compute the mse error here and generate the error-level label
 
+            ###########
+            #mse = tf.keras.losses.mean_squared_error(y_test.reshape((183,-1)), x_test_ensemble.reshape((183,-1))).numpy()
 
-            mse = tf.keras.losses.mean_squared_error(y_test.reshape((183,-1)), x_test_ensemble.reshape((183,-1))).numpy()
-
-            mse_list.extend(mse)
-            
+            #mse_list.extend(mse)
+            ################
             #name_list.extend(mod_idx)
             #prediction_list.extend(recon_im_decode)
-
+            #print('@@@@@@@@@@@@@@@@@@@@@')
+            #print(np.shape(x_test_ensemble))
             print("Reconstructing ...")
-
+            #print(np.shape(x_test_ensemble[:, 0]))
             recon_im_temp = reconstruct_volume_imaging4(gen_conf, test_conf, x_test_ensemble[:, 0])
-
+            #np.save('/cluster/project0/IQT_Nigeria/others/SuperMudi/code/iqt_supermudi-main/test_after_recon_{}.npy'.format(test_index), recon_im_temp)
             # compute MSE
             print("Compute MSE ...")
             mask_volume = (output_data[test_index, 0] != 0)
+            #print('mask_volume shape: ', np.shape(mask_volume))
+            #np.save('/cluster/project0/IQT_Nigeria/others/SuperMudi/code/iqt_supermudi-main/test_mask_{}.npy'.format(test_index), mask_volume)
             mse_mod = np.mean((output_data[test_index, 0] - recon_im_temp) ** 2 * mask_volume)
             print("The MSE of Subject {}th, Modality {}th is {}".format(vol_idx, mod_idx, mse_mod))
             mse_array.append(mse_mod)
 
             # save recon image to 4d structure
             recon_im_4d[:, :, :, mod_idx] = recon_im_temp
+            print('4D shape: ',np.shape(recon_im_4d))
+            #np.save('/cluster/project0/IQT_Nigeria/others/SuperMudi/code/iqt_supermudi-main/test_4d_{}.npy'.format(test_index), recon_im_4d)
             del x_test, x_test_ensemble
 
         # image-level
@@ -304,8 +319,8 @@ def eval_model(gen_conf,
     print("The average of MSE over all subjects and modalities is {}".format(mse))
 
 
-    Data4stage2 = pd.DataFrame({'Name':name_list, 'MSE':mse_list})
-    Data4stage2.to_csv('/cluster/project0/IQT_Nigeria/others/SuperMudi/code/iqt_supermudi-main/Stage3_para_test_patch_loss.csv', index = None, encoding='utf8')
+    #Data4stage2 = pd.DataFrame({'Name':name_list, 'MSE':mse_list})
+    #Data4stage2.to_csv('/cluster/project0/IQT_Nigeria/others/SuperMudi/code/iqt_supermudi-main/Stage3_baseline_test_patch_loss.csv', index = None, encoding='utf8')
 
     return True
 

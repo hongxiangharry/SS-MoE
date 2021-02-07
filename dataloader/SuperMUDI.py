@@ -334,9 +334,9 @@ class SuperMudiSequence(Sequence):
         # random shuffle
         #self.patch_lib_filenames = self.patch_lib_filenames
         #20210124
-        #if self.is_shuffle is True:
-        #    np.random.shuffle(self.patch_lib_filenames)
-        self.patch_lib_filenames = self.patch_lib_filenames
+        if self.is_shuffle is True:
+            np.random.shuffle(self.patch_lib_filenames)
+        #self.patch_lib_filenames = self.patch_lib_filenames
 
     def __unzip(self, src_filename, dest_dir):
         with zipfile.ZipFile(src_filename) as z:
