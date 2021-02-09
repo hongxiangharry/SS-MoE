@@ -307,7 +307,7 @@ def training_S3(gen_conf, train_conf) :
     for case in range(train_conf['cases']):
         print("Start Case " + str(case) + " training...")
         model_1, model_2, model_3, model_4, mse_1, mse_2, mse_3, mse_4 = train_model_generator_S3(gen_conf, train_conf, train_generator_1, train_generator_2, train_generator_3, train_generator_4, val_generator_1, val_generator_2, val_generator_3, val_generator_4, case)
-        mse_array.append(mse_2)
+        mse_array.append(mse_2) # HL comments: bug, why only save mse_2?
 
     # write to file
     save_msecorr_array(gen_conf, train_conf, mse_array, None)

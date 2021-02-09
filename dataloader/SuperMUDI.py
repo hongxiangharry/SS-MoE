@@ -164,7 +164,9 @@ class SuperMudiSequence(Sequence):
 
 '''
 
-
+# MoE Version
+# Import acquisition parameters into data-loader
+#
 
 def DefineTrainValSuperMudiDataloader(gen_conf, train_conf, para, csv_path, is_shuffle_trainval = False):
     dataset = train_conf['dataset']
@@ -991,10 +993,16 @@ class SuperMudiSequence_S3_class_label(Sequence):
     # def __kfold_split_train_val
 
 
+'''
+    Adapt to a mixup module
+    N, num of used training patches, should be larger than the searched patch.
+    Random choice N from N_vol.
+     
+    Corresponding coder: Harry Lin
+    08/02/2021 
+'''
 
-
-
-def DefineTrainValSuperMudiDataloader_Stage3(gen_conf, train_conf, csv_path, para='para', is_shuffle_trainval = False):
+def DefineTrainValSuperMudiDataloader_Stage3(gen_conf, train_conf, csv_path, para='para', is_shuffle_trainval = False, num_mixup = None):
     dataset = train_conf['dataset']
     dataset_path = gen_conf['dataset_path']
     dataset_info = gen_conf['dataset_info'][dataset]
@@ -1006,42 +1014,65 @@ def DefineTrainValSuperMudiDataloader_Stage3(gen_conf, train_conf, csv_path, par
     data_list = pd.read_csv(csv_path)
     #label_in = data_list[['Name']]
     patch_lib_filenames_in = np.array(data_list[['Name']])
-    N_vol = len(patch_lib_filenames_in)
 
-    # get the path of the patch and the N_vol is 5
-    #N_vol = len(sorted(glob.glob(patch_dir + '/*.npz')))
-    #N_vol = train_conf['num_training_patches']
-    if is_shuffle_trainval is True:
-        shuffle_order = np.random.permutation(N_vol)
+    N_vol = len(patch_lib_filenames_in) ## num of original data
+
+    if num_mixup is not None:
+        ## mix-up module
+        shuffle_order = np.random.choice(N_vol, num_mixup, replace=True)
+
+        N = num_mixup # num_mixup should > N
+        val_volumes = np.int32(np.ceil(N * validation_split_ratio))
+        train_volumes = N - val_volumes
+
+        N_val = np.int32(np.ceil(N * validation_split_ratio))
+        N_train = N - N_val
+
+        shuffle_order_mixup = np.random.choice(N_vol, num_mixup, replace=True)
+
     else:
-        shuffle_order = np.arange(N_vol)
+        N_vol = len(patch_lib_filenames_in)
 
-    # the num_training_patch is 40000, says there are 40000 patch seg out for training
-    #N = train_conf['num_training_patches']  # num of used training patches
-    N = len(patch_lib_filenames_in)
-    # the ratio 0.2 vol (1) for validation, and 0.8 vol (4) for training
-    val_volumes = np.int32(np.ceil(N_vol * validation_split_ratio))
-    train_volumes = N_vol - val_volumes
+        # get the path of the patch and the N_vol is 5
+        # N_vol = len(sorted(glob.glob(patch_dir + '/*.npz')))
+        # N_vol = train_conf['num_training_patches']
+        if is_shuffle_trainval is True:
+            shuffle_order = np.random.permutation(N_vol)
+        else:
+            shuffle_order = np.arange(N_vol)
 
-    # the ratio 0.2 patch (8000) for validation, and 0.8 patch (32000) for training
-    N_val = np.int32(np.ceil(N * validation_split_ratio))
-    N_train = N - N_val
+        # the num_training_patch is 40000, says there are 40000 patch seg out for training
+        # N = train_conf['num_training_patches']  # num of used training patches
+        N = len(patch_lib_filenames_in)
+        # the ratio 0.2 vol (1) for validation, and 0.8 vol (4) for training
+        val_volumes = np.int32(np.ceil(N_vol * validation_split_ratio))
+        train_volumes = N_vol - val_volumes
+
+        # the ratio 0.2 patch (8000) for validation, and 0.8 patch (32000) for training
+        N_val = np.int32(np.ceil(N * validation_split_ratio))
+        N_train = N - N_val
+
+        shuffle_order_mixup = None
 
     # shuffle_order is arrange, so no shuffle here, 32000 patch 
-    trainDataloader = SuperMudiSequence_S3(gen_conf, train_conf, para, shuffle_order[:train_volumes], N_train, csv_path)
+    trainDataloader = SuperMudiSequence_S3(gen_conf, train_conf, para, shuffle_order[:train_volumes], N_train, csv_path, shuffle_order_mixup = shuffle_order_mixup)
     if validation_split_ratio != 0:
         
         # shuffle_order is False, so 32000-4000 patch for val
-        valDataloader = SuperMudiSequence_S3(gen_conf, train_conf, para, shuffle_order[train_volumes:], N_val, csv_path)
+        valDataloader = SuperMudiSequence_S3(gen_conf, train_conf, para, shuffle_order[train_volumes:], N_val, csv_path, shuffle_order_mixup = shuffle_order_mixup)
     else:
         valDataloader = None
 
     return trainDataloader, valDataloader
 
-
+'''
+    Add a mixup module
+    Corresponding coder: Harry Lin
+    08/02/2021 
+'''
 
 class SuperMudiSequence_S3(Sequence):
-    def __init__(self, gen_conf, train_conf, para, shuffle_order, N, csv_path):
+    def __init__(self, gen_conf, train_conf, para, shuffle_order, N, csv_path, shuffle_order_mixup = None):
         dataset = train_conf['dataset']
         dataset_path = gen_conf['dataset_path']
         dataset_info = gen_conf['dataset_info'][dataset]
@@ -1086,34 +1117,40 @@ class SuperMudiSequence_S3(Sequence):
         '''
 
         data_list = pd.read_csv(csv_path)
-        
+
         patch_lib_filenames_in = np.array(data_list['Name'])
 
-        #print('!!!!!!!!!!!!!!!!!')
-        #print(patch_lib_filenames_in[2:10])
-        #print(label_level_list_in[2:10])
+        # print('!!!!!!!!!!!!!!!!!')
+        # print(patch_lib_filenames_in[2:10])
+        # print(label_level_list_in[2:10])
 
         self.patch_lib_filenames = patch_lib_filenames_in[shuffle_order]
 
-        #print('@@@@@@@@@@@@@@@@@')
-        #print(self.patch_lib_filenames[2:10])
-        #print(self.label_level_list[2:10])
-        
-        para_file=open('/cluster/project0/IQT_Nigeria/others/SuperMudi/code/iqt_supermudi-main/parameters.txt')
-        txt=para_file.readlines()
-        para_list=[]
+        if shuffle_order_mixup is not None:
+            self.patch_lib_filenames_mixup = patch_lib_filenames_in[shuffle_order_mixup]
+            self.mixupFlag = True
+        else:
+            self.mixupFlag = False
+
+        # print('@@@@@@@@@@@@@@@@@')
+        # print(self.patch_lib_filenames[2:10])
+        # print(self.label_level_list[2:10])
+
+        para_file = open('/cluster/project0/IQT_Nigeria/others/SuperMudi/code/iqt_supermudi-main/parameters.txt')
+        txt = para_file.readlines()
+        para_list = []
         for w in txt:
-            #w=w.replace('\n','')
-            w=w.split()
+            # w=w.replace('\n','')
+            w = w.split()
             w = list(map(float, w))
             para_list.append(w)
 
         self.para_numpy = np.array(para_list)
 
         d_mean = np.mean(self.para_numpy, axis=0)
-        d_std = np.std(self.para_numpy,axis=0)
+        d_std = np.std(self.para_numpy, axis=0)
 
-        self.para_numpy = (self.para_numpy-d_mean)/d_std
+        self.para_numpy = (self.para_numpy - d_mean) / d_std
 
         self.n_classes = 4
 
@@ -1122,25 +1159,26 @@ class SuperMudiSequence_S3(Sequence):
 
     def __getitem__(self, idx):
 
-        batch_filenames = self.patch_lib_filenames[idx * self.batch_size:(idx+1)*self.batch_size]
+        batch_filenames = self.patch_lib_filenames[idx * self.batch_size:(idx + 1) * self.batch_size]
 
-        #print('###########################')
-        #print(batch_filenames)
-        #print(batch_label)
-
+        # print('###########################')
+        # print(batch_filenames)
+        # print(batch_label)
 
         # batch[0] name is /scratch0/harrylin/2700564/patch/240-cdmri0014-(8, 8, 8)-(4, 4, 4)-0008.npz
-        #print('batch name is,', batch_filenames[0])
+        # print('batch name is,', batch_filenames[0])
 
         batch_error_label = []
         x_batch = []
         y_batch = []
+        x2_batch = []
+        y2_batch = []
         para_batch = []
-        
+
         for filename in batch_filenames:
-            #rnd_patch_idx += 1
+            # rnd_patch_idx += 1
             # filename is /scratch0/harrylin/2700564/patch/632-cdmri0011-(8, 8, 8)-(4, 4, 4)-0009.npz
-            #print('filename is: ', filename)
+            # print('filename is: ', filename)
 
             filename_detail = filename.split('-patch-')[0] + '.npz'
             x_patches, y_patches = self.__read_patch_data(filename_detail)
@@ -1149,20 +1187,60 @@ class SuperMudiSequence_S3(Sequence):
             x_batch.append(x_patches[int(specific_patch_num)])
             y_batch.append(y_patches[int(specific_patch_num)])
 
+        if self.mixupFlag is True:
+            batch_filenames_2 = self.patch_lib_filenames_mixup[idx * self.batch_size:(idx + 1) * self.batch_size]
+            for filename in batch_filenames_2:
+                filename_detail = filename.split('-patch-')[0] + '.npz'
+                x_patches, y_patches = self.__read_patch_data(filename_detail)
 
-        #print(np.array(batch_filenames))
-        #print(np.array(batch_label))
+                specific_patch_num = filename.split('-patch-')[1]
+                x2_batch.append(x_patches[int(specific_patch_num)])
+                y2_batch.append(y_patches[int(specific_patch_num)])
 
-        if self.para=='para':
+            x_batch, y_batch = self.mixup_module(np.array(x_batch), np.array(x2_batch), np.array(y_batch), np.array(y2_batch))
+
+        # print(np.array(batch_filenames))
+        # print(np.array(batch_label))
+
+        if self.para == 'para':
             return [np.array(x_batch), np.squeeze(np.array(para_batch))], np.array(y_batch)
         else:
             return np.array(x_batch), np.array(y_batch)
 
+    def mixup_module(self, x1_batch, x2_batch, y1_batch, y2_batch, alpha = 0.5 ):
+        '''
+        lambda ~ Beta(alpha, alpha): weight
+        '''
+        weight_shape = (x1_batch.shape[0], 1, 1, 1, 1) # dim = 5
+        lambda_weight = np.random.beta(alpha, alpha, weight_shape)
+        # simultaneously flip x and y with a random direction
+        x1_batch, y1_batch = self.__rand_flip(x1_batch, y1_batch)
+        x2_batch, y2_batch = self.__rand_flip(x2_batch, y2_batch)
+        x = x1_batch * lambda_weight + x2_batch * (1-lambda_weight)
+        y = y1_batch * lambda_weight + y2_batch * (1-lambda_weight)
+
+        return x, y
+
+    def __rand_flip(self, x, y):
+        # flip x-axis
+        if np.random.uniform(0,1) < 0.5:
+            x = np.flip(x, 2)
+            y = np.flip(y, 2)
+        # flip y-axis
+        if np.random.uniform(0,1) < 0.5:
+            x = np.flip(x, 3)
+            y = np.flip(y, 3)
+        # flip z-ais
+        if np.random.uniform(0,1) < 0.5:
+            x = np.flip(x, 4)
+            y = np.flip(y, 4)
+        return x, y
+
     def on_epoch_end(self):
         # random shuffle
-        #self.patch_lib_filenames = self.patch_lib_filenames
-        #20210124
-        #if self.is_shuffle is True:
+        # self.patch_lib_filenames = self.patch_lib_filenames
+        # 20210124
+        # if self.is_shuffle is True:
         #    np.random.shuffle(self.patch_lib_filenames)
         self.patch_lib_filenames = self.patch_lib_filenames
 
@@ -1182,19 +1260,224 @@ class SuperMudiSequence_S3(Sequence):
         files = np.load(filepath)
         return files['x_patches'], files['y_patches']
 
-    def __split_train_val(self, train_indexes, N, validation_split, is_val_gen = False):
+    def __split_train_val(self, train_indexes, N, validation_split, is_val_gen=False):
         N_vol = len(train_indexes)
         val_volumes = np.int32(np.ceil(N_vol * validation_split))
         train_volumes = N_vol - val_volumes
 
         val_patches = np.int32(np.ceil(N * validation_split))
-        train_patches = N-val_patches
+        train_patches = N - val_patches
 
         if is_val_gen is True and validation_split != 0:
             return train_indexes[train_volumes:], val_patches
         elif is_val_gen is False:
-            return train_indexes[:train_volumes], train_patches # training data
+            return train_indexes[:train_volumes], train_patches  # training data
         else:
             raise ValueError("validation_split should be non-zeroed value when is_val_gen == True")
 
     # def __kfold_split_train_val
+
+#
+# def DefineTrainValSuperMudiDataloader_Stage3(gen_conf, train_conf, csv_path, para='para', is_shuffle_trainval=False):
+#     dataset = train_conf['dataset']
+#     dataset_path = gen_conf['dataset_path']
+#     dataset_info = gen_conf['dataset_info'][dataset]
+#     validation_split_ratio = train_conf['validation_split']
+#
+#     path = dataset_info['path'][2]  # patch
+#     patch_dir = os.path.join(dataset_path, path)
+#
+#     data_list = pd.read_csv(csv_path)
+#     # label_in = data_list[['Name']]
+#     patch_lib_filenames_in = np.array(data_list[['Name']])
+#     N_vol = len(patch_lib_filenames_in)
+#
+#     # get the path of the patch and the N_vol is 5
+#     # N_vol = len(sorted(glob.glob(patch_dir + '/*.npz')))
+#     # N_vol = train_conf['num_training_patches']
+#     if is_shuffle_trainval is True:
+#         shuffle_order = np.random.permutation(N_vol)
+#     else:
+#         shuffle_order = np.arange(N_vol)
+#
+#     # the num_training_patch is 40000, says there are 40000 patch seg out for training
+#     # N = train_conf['num_training_patches']  # num of used training patches
+#     N = len(patch_lib_filenames_in)
+#     # the ratio 0.2 vol (1) for validation, and 0.8 vol (4) for training
+#     val_volumes = np.int32(np.ceil(N_vol * validation_split_ratio))
+#     train_volumes = N_vol - val_volumes
+#
+#     # the ratio 0.2 patch (8000) for validation, and 0.8 patch (32000) for training
+#     N_val = np.int32(np.ceil(N * validation_split_ratio))
+#     N_train = N - N_val
+#
+#     # shuffle_order is arrange, so no shuffle here, 32000 patch
+#     trainDataloader = SuperMudiSequence_S3(gen_conf, train_conf, para, shuffle_order[:train_volumes], N_train, csv_path)
+#     if validation_split_ratio != 0:
+#
+#         # shuffle_order is False, so 32000-4000 patch for val
+#         valDataloader = SuperMudiSequence_S3(gen_conf, train_conf, para, shuffle_order[train_volumes:], N_val, csv_path)
+#     else:
+#         valDataloader = None
+#
+#     return trainDataloader, valDataloader
+
+#
+# class SuperMudiSequence_S3(Sequence):
+#     def __init__(self, gen_conf, train_conf, para, shuffle_order, N, csv_path):
+#         dataset = train_conf['dataset']
+#         dataset_path = gen_conf['dataset_path']
+#         dataset_info = gen_conf['dataset_info'][dataset]
+#
+#         patch_shape = train_conf['patch_shape']
+#         extraction_step = train_conf['extraction_step']
+#
+#         self.para = para
+#         self.batch_size = train_conf['batch_size']
+#         self.N = N
+#         validation_split = train_conf['validation_split']
+#
+#         # It is an update for local storage setup. All required data have been completely unzipped to the local storage. Need to set up dataset_info->dataset->path[2]
+#         path = dataset_info['path'][2]  # patch
+#         self.patch_dir = os.path.join(dataset_path, path)
+#
+#         self.is_shuffle = train_conf['shuffle']
+#
+#         ## old version
+#         # self.patch_zip_path = os.path.join(dataset_path, path, "{}-{}.zip").format(patch_shape, extraction_step)
+#         # self.patch_dir = os.path.splitext(self.patch_zip_path)[0]
+#
+#         # # unzip packages
+#         # if not os.path.isdir(self.patch_dir):
+#         #     self.__unzip(self.patch_zip_path, self.patch_dir)
+#         ## old version
+#
+#         # define shuffle list outside
+#         '''
+#         self.patch_lib_filenames = np.array(sorted(glob.glob(self.patch_dir + '/*.npz')))
+#         self.patch_lib_filenames = self.patch_lib_filenames[shuffle_order]
+#
+#         # # train-val split
+#         # self.patch_lib_filenames, self.N = self.__split_train_val(self.patch_lib_filenames, self.N, validation_split, is_val_gen)
+#         # expanded patch lib = N
+#         self.patch_lib_filenames = np.tile(self.patch_lib_filenames, math.ceil(self.N / len(self.patch_lib_filenames)))[:self.N]
+#
+#         # random shuffle
+#         # 20210124
+#         if self.is_shuffle is True:
+#             np.random.shuffle(self.patch_lib_filenames)
+#         '''
+#
+#         data_list = pd.read_csv(csv_path)
+#
+#         patch_lib_filenames_in = np.array(data_list['Name'])
+#
+#         #print('!!!!!!!!!!!!!!!!!')
+#         #print(patch_lib_filenames_in[2:10])
+#         #print(label_level_list_in[2:10])
+#
+#         self.patch_lib_filenames = patch_lib_filenames_in[shuffle_order]
+#
+#         #print('@@@@@@@@@@@@@@@@@')
+#         #print(self.patch_lib_filenames[2:10])
+#         #print(self.label_level_list[2:10])
+#
+#         para_file=open('/cluster/project0/IQT_Nigeria/others/SuperMudi/code/iqt_supermudi-main/parameters.txt')
+#         txt=para_file.readlines()
+#         para_list=[]
+#         for w in txt:
+#             #w=w.replace('\n','')
+#             w=w.split()
+#             w = list(map(float, w))
+#             para_list.append(w)
+#
+#         self.para_numpy = np.array(para_list)
+#
+#         d_mean = np.mean(self.para_numpy, axis=0)
+#         d_std = np.std(self.para_numpy,axis=0)
+#
+#         self.para_numpy = (self.para_numpy-d_mean)/d_std
+#
+#         self.n_classes = 4
+#
+#     def __len__(self):
+#         return math.ceil(self.N / self.batch_size)
+#
+#     def __getitem__(self, idx):
+#
+#         batch_filenames = self.patch_lib_filenames[idx * self.batch_size:(idx+1)*self.batch_size]
+#
+#         #print('###########################')
+#         #print(batch_filenames)
+#         #print(batch_label)
+#
+#
+#         # batch[0] name is /scratch0/harrylin/2700564/patch/240-cdmri0014-(8, 8, 8)-(4, 4, 4)-0008.npz
+#         #print('batch name is,', batch_filenames[0])
+#
+#         batch_error_label = []
+#         x_batch = []
+#         y_batch = []
+#         para_batch = []
+#
+#         for filename in batch_filenames:
+#             #rnd_patch_idx += 1
+#             # filename is /scratch0/harrylin/2700564/patch/632-cdmri0011-(8, 8, 8)-(4, 4, 4)-0009.npz
+#             #print('filename is: ', filename)
+#
+#             filename_detail = filename.split('-patch-')[0] + '.npz'
+#             x_patches, y_patches = self.__read_patch_data(filename_detail)
+#
+#             specific_patch_num = filename.split('-patch-')[1]
+#             x_batch.append(x_patches[int(specific_patch_num)])
+#             y_batch.append(y_patches[int(specific_patch_num)])
+#
+#
+#         #print(np.array(batch_filenames))
+#         #print(np.array(batch_label))
+#
+#         if self.para=='para':
+#             return [np.array(x_batch), np.squeeze(np.array(para_batch))], np.array(y_batch)
+#         else:
+#             return np.array(x_batch), np.array(y_batch)
+#
+#     def on_epoch_end(self):
+#         # random shuffle
+#         #self.patch_lib_filenames = self.patch_lib_filenames
+#         #20210124
+#         #if self.is_shuffle is True:
+#         #    np.random.shuffle(self.patch_lib_filenames)
+#         self.patch_lib_filenames = self.patch_lib_filenames
+#
+#     def __unzip(self, src_filename, dest_dir):
+#         with zipfile.ZipFile(src_filename) as z:
+#             z.extractall(path=dest_dir)
+#
+#     def clear_extracted_files(self):
+#         if os.path.isdir(self.patch_dir):
+#             shutil.rmtree(self.patch_dir)
+#             return True
+#         else:
+#             print("'{}' doesn't exist ...".format(self.patch_dir))
+#             return False
+#
+#     def __read_patch_data(self, filepath):
+#         files = np.load(filepath)
+#         return files['x_patches'], files['y_patches']
+#
+#     def __split_train_val(self, train_indexes, N, validation_split, is_val_gen = False):
+#         N_vol = len(train_indexes)
+#         val_volumes = np.int32(np.ceil(N_vol * validation_split))
+#         train_volumes = N_vol - val_volumes
+#
+#         val_patches = np.int32(np.ceil(N * validation_split))
+#         train_patches = N-val_patches
+#
+#         if is_val_gen is True and validation_split != 0:
+#             return train_indexes[train_volumes:], val_patches
+#         elif is_val_gen is False:
+#             return train_indexes[:train_volumes], train_patches # training data
+#         else:
+#             raise ValueError("validation_split should be non-zeroed value when is_val_gen == True")
+#
+#     # def __kfold_split_train_val
