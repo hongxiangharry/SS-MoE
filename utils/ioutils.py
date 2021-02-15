@@ -156,6 +156,100 @@ def read_model(gen_conf, train_conf, case_name) :
 
     return model
 
+
+def read_dataset_eval(gen_conf, train_conf, trainTestFlag = 'train') :
+    dataset = train_conf['dataset']
+    dataset_path = gen_conf['dataset_path']
+    dataset_info = gen_conf['dataset_info'][dataset]
+    if dataset == 'IBADAN-k8' :
+        return read_IBADAN_data(dataset_path, dataset_info, trainTestFlag)
+    if dataset == 'HBN' :
+        return read_HBN_dataset(dataset_path, dataset_info, trainTestFlag)
+    if dataset == 'HCP-Wu-Minn-Contrast' :
+        return read_HCPWuMinnContrast_dataset(dataset_path, dataset_info, trainTestFlag)
+    if dataset == 'iSeg2017' :
+        return read_iSeg2017_dataset(dataset_path, dataset_info)
+    if dataset == 'IBSR18' :
+        return read_IBSR18_dataset(dataset_path, dataset_info)
+    if dataset == 'MICCAI2012' :
+        return read_MICCAI2012_dataset(dataset_path, dataset_info)
+    if dataset == 'HCP-Wu-Minn-Contrast-Augmentation' :
+        return read_HCPWuMinnContrastAugmentation_dataset(dataset_path, dataset_info, trainTestFlag)
+    if dataset == 'HCP-Wu-Minn-Contrast-Multimodal' :
+        return read_HCPWuMinnContrastMultimodal_dataset(dataset_path, dataset_info, trainTestFlag)
+    if dataset == 'Nigeria19-Multimodal' :
+        return read_Nigeria19Multimodal_dataset(dataset_path, dataset_info, trainTestFlag)
+    if dataset == 'Juntendo-Volunteer' :
+        return read_JH_Volunteer_dataset(dataset_path, dataset_info, trainTestFlag)
+    if dataset == 'MBB' :
+        return read_MBB_dataset(dataset_path, dataset_info, trainTestFlag)
+    if dataset == 'MUDI' :
+        return read_MUDI_dataset_eval(dataset_path, dataset_info, trainTestFlag)
+
+def read_MUDI_dataset_eval(dataset_path,
+                      dataset_info,
+                      trainTestFlag='train'):
+    dimensions = dataset_info['dimensions']
+    sparse_scale = dataset_info['sparse_scale']
+    input_dimension = tuple(np.array(dimensions) // sparse_scale)
+    real_modalities = dataset_info['real_modalities']
+    modalities = dataset_info['modalities']
+    path = dataset_info['path'][0] # process, 0
+    unzip_path = dataset_info['path'][2] # patch, 2
+    pattern = dataset_info['general_pattern']
+    modality_categories = dataset_info['modality_categories']
+    in_postfix = dataset_info['in_postfix']
+    out_postfix = dataset_info['out_postfix']
+    filename_list = []
+    if trainTestFlag == 'train':
+        subject_lib = dataset_info['training_subjects']
+        num_volumes = dataset_info['num_volumes'][0]
+    elif trainTestFlag == 'test' or trainTestFlag == 'eval':
+        subject_lib = dataset_info['test_subjects']
+        num_volumes = dataset_info['num_volumes'][1]
+    else:
+        raise ValueError("trainTestFlag should be declared as 'train'/'test'/'evaluation'")
+
+    in_data = np.zeros((num_volumes * real_modalities, 1) + input_dimension, dtype=np.float32)
+    if trainTestFlag == 'train' or trainTestFlag == 'eval':
+        out_data = np.zeros((num_volumes * real_modalities, 1) + dimensions, dtype=np.float32)
+    else:
+        out_data = None
+
+    for img_idx in range(num_volumes):
+        in_zip_name = os.path.join(dataset_path,
+                                   path,
+                                   pattern).format(subject_lib[img_idx],
+                                                   in_postfix, '', 'zip')
+        in_unzip_dir = os.path.splitext(os.path.join(dataset_path, unzip_path, pattern)
+                                        .format(subject_lib[img_idx], in_postfix+'_unzip', '', 'zip'))[0]
+        unzip(in_zip_name, in_unzip_dir)
+
+        if trainTestFlag == 'train' or trainTestFlag == 'eval':
+            out_zip_name = os.path.join(dataset_path,
+                                        path,
+                                        pattern).format(subject_lib[img_idx],
+                                                        out_postfix, '', 'zip')
+            out_unzip_dir = os.path.splitext(os.path.join(dataset_path, unzip_path, pattern)
+                                        .format(subject_lib[img_idx], out_postfix+'_unzip', '', 'zip'))[0]
+            unzip(out_zip_name, out_unzip_dir)
+
+        for mod_idx in range(real_modalities):
+            in_filename = os.path.join(dataset_path, unzip_path, subject_lib[img_idx], pattern).format(in_postfix+'_unzip', in_postfix, str(mod_idx).zfill(4), 'nii.gz')
+            filename_list.append(in_filename)
+            in_data[img_idx * real_modalities + mod_idx, 0] = read_volume(in_filename).astype(np.float32)
+            if trainTestFlag == 'train' or trainTestFlag == 'eval':
+                out_filename = os.path.join(dataset_path, unzip_path, subject_lib[img_idx], pattern).format(out_postfix+'_unzip', out_postfix, str(mod_idx).zfill(4), 'nii.gz')
+                out_data[img_idx * real_modalities + mod_idx, 0] = read_volume(out_filename).astype(np.float32)
+
+        shutil.rmtree(in_unzip_dir)
+        if trainTestFlag == 'train' or trainTestFlag == 'eval':
+            shutil.rmtree(out_unzip_dir)
+
+    return in_data, out_data, filename_list
+
+
+
 def read_dataset(gen_conf, train_conf, trainTestFlag = 'train') :
     dataset = train_conf['dataset']
     dataset_path = gen_conf['dataset_path']

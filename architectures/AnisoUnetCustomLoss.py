@@ -256,7 +256,7 @@ def __generate_hetero_unet_model_1dir(
             pool = get_max_pooling_layer(dimension, conv, mp_kernel_size) # 16 x 16
             # bb block
             conv = get_shuffling_operation(dimension, conv, n_bb_mapping, temp_sparse_scale) # 32 x 32
-            print(conv.output_shape)
+            # print(conv.output_shape)
             conv_stack.append(conv)
             conv = get_conv_core(dimension, pool, int(num_filters*2**idx/downsize_factor), num_kernel=num_kernels) # 16 x 16
 
